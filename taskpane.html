@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>مساعد AK للصياغة</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet"/>
+<style>
+:root{--g:#1f5a3e;--gd:#123c2a;--gold:#bd9552;--ink:#17212f;--muted:#64748b;--line:#e3eaf2;--bg:#f4f7f6}
+*{box-sizing:border-box;font-family:"Tajawal",sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink)}
+.hd{background:linear-gradient(135deg,var(--gd),var(--g));color:#fff;padding:18px 16px;display:flex;align-items:center;gap:11px}
+.hd .logo{width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.hd .logo img{width:30px;height:30px;object-fit:contain;filter:brightness(0) invert(1)}
+.hd b{display:block;font-size:1rem;font-weight:900}
+.hd span{display:block;font-size:.7rem;opacity:.75}
+.wrap{padding:16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 6px 18px rgba(15,23,42,.05);margin-bottom:14px}
+label{font-size:.8rem;font-weight:700;display:block;margin-bottom:6px}
+input{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:.95rem;margin-bottom:12px}
+input:focus{outline:none;border-color:var(--gold)}
+.btn{width:100%;border:none;border-radius:11px;padding:13px;font-size:.95rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary{background:var(--g);color:#fff}
+.btn-primary:hover{background:var(--gd)}
+.btn-gold{background:var(--gold);color:#fff}
+.btn-gold:hover{filter:brightness(.95)}
+.btn:disabled{opacity:.6;cursor:default}
+.hint{font-size:.78rem;color:var(--muted);line-height:1.7;margin:0 0 12px}
+.status{font-size:.82rem;font-weight:700;margin-top:12px;padding:10px 12px;border-radius:10px;display:none}
+.status.show{display:block}
+.status.ok{background:#e8f5ee;color:#0f7a4d}
+.status.err{background:#fdecec;color:#c0392b}
+.status.warn{background:#fff7e6;color:#9a6b00}
+.tool-title{font-size:.95rem;font-weight:900;margin:0 0 4px;display:flex;align-items:center;gap:7px}
+.tool-title i{color:var(--gold)}
+.foot{text-align:center;padding:8px}
+.foot a{font-size:.75rem;color:var(--muted);text-decoration:none}
+.hidden{display:none}
+</style>
+</head>
+<body>
+  <div class="hd">
+    <div class="logo"><img src="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png" alt="AK"/></div>
+    <div><b>مساعد الصياغة</b><span>شركة عبدالله خالد الراشد</span></div>
+  </div>
+
+  <div class="wrap">
+    <!-- تسجيل الدخول -->
+    <div id="loginView" class="card">
+      <p class="tool-title">تسجيل الدخول</p>
+      <p class="hint">ادخل باسم مستخدم ووردبريس و Application Password للوصول لأدوات الذكاء.</p>
+      <label>اسم المستخدم</label>
+      <input id="user" type="text" autocomplete="username"/>
+      <label>Application Password</label>
+      <input id="pass" type="password" autocomplete="current-password"/>
+      <button id="loginBtn" class="btn btn-primary">دخول</button>
+      <div id="loginStatus" class="status"></div>
+    </div>
+
+    <!-- الأدوات -->
+    <div id="toolsView" class="hidden">
+      <div class="card">
+        <p class="tool-title">✦ أسلوب المحامي</p>
+        <p class="hint">حدّد نصاً في المستند ثم اضغط الزر — يعيد الذكاء صياغته بأسلوب المكتب القانوني الرصين ويستبدله مباشرة.</p>
+        <button id="styleBtn" class="btn btn-gold">أعد الصياغة بأسلوب المحامي</button>
+        <div id="styleStatus" class="status"></div>
+      </div>
+      <div class="foot"><a href="#" id="logout">تسجيل خروج</a></div>
+    </div>
+  </div>
+
+<script>
+var API = "https://update.aklaw-sa.com/wp-json/ak/v1/";
+function $(id){return document.getElementById(id);}
+function setStatus(el,msg,kind){el.className="status show "+(kind||"");el.textContent=msg;}
+function hideStatus(el){el.className="status";}
+function token(){return localStorage.getItem("ak_token")||"";}
+
+function showTools(){ $("loginView").classList.add("hidden"); $("toolsView").classList.remove("hidden"); }
+function showLogin(){ $("toolsView").classList.add("hidden"); $("loginView").classList.remove("hidden"); }
+
+Office.onReady(function(info){
+  if(token()) showTools(); else showLogin();
+
+  $("loginBtn").onclick = function(){
+    var u=$("user").value.trim(), p=$("pass").value.replace(/\s/g,"");
+    if(!u||!p){ setStatus($("loginStatus"),"أدخل اسم المستخدم وكلمة المرور","warn"); return; }
+    var t = btoa(u+":"+p);
+    setStatus($("loginStatus"),"جاري التحقق...","warn");
+    $("loginBtn").disabled=true;
+    fetch(API+"ping",{headers:{Authorization:"Basic "+t}})
+      .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+      .then(function(){ localStorage.setItem("ak_token",t); $("loginBtn").disabled=false; showTools(); })
+      .catch(function(){ $("loginBtn").disabled=false; setStatus($("loginStatus"),"تعذّر الدخول. تأكد من البيانات.","err"); });
+  };
+
+  $("logout").onclick = function(e){ e.preventDefault(); localStorage.removeItem("ak_token"); showLogin(); };
+
+  $("styleBtn").onclick = function(){
+    var st=$("styleStatus");
+    Word.run(function(ctx){
+      var sel = ctx.document.getSelection();
+      sel.load("text");
+      return ctx.sync().then(function(){
+        var text = (sel.text||"").trim();
+        if(!text){ setStatus(st,"حدّد نصاً أولاً ثم اضغط الزر","warn"); return; }
+        setStatus(st,"جاري إعادة الصياغة بأسلوب المحامي...","warn");
+        $("styleBtn").disabled=true;
+        return fetch(API+"style",{
+          method:"POST",
+          headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},
+          body:JSON.stringify({text:text})
+        })
+        .then(function(r){
+          if(r.status===401){ localStorage.removeItem("ak_token"); showLogin(); throw new Error("انتهت الجلسة"); }
+          return r.ok ? r.json() : Promise.reject();
+        })
+        .then(function(d){
+          var newText = (d && d.text) ? d.text : "";
+          if(!newText){ throw new Error("لا نتيجة"); }
+          return Word.run(function(c2){
+            var s2 = c2.document.getSelection();
+            s2.insertText(newText, Word.InsertLocation.replace);
+            return c2.sync();
+          });
+        })
+        .then(function(){ $("styleBtn").disabled=false; setStatus(st,"تمت إعادة الصياغة ✅","ok"); })
+        .catch(function(err){ $("styleBtn").disabled=false; setStatus(st,(err&&err.message)||"تعذّرت إعادة الصياغة","err"); });
+      });
+    }).catch(function(){ $("styleBtn").disabled=false; setStatus($("styleStatus"),"تعذّر قراءة التحديد","err"); });
+  };
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>d3f2a1b6-7c4e-4a90-b1e2-9f8c7a6b5d40</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>AK Law</ProviderName>
+  <DefaultLocale>ar-SA</DefaultLocale>
+  <DisplayName DefaultValue="مساعد AK للصياغة"/>
+  <Description DefaultValue="أدوات الصياغة القانونية والذكاء الصناعي لمكتب عبدالله خالد الراشد للمحاماة"/>
+  <IconUrl DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
+  <HighResolutionIconUrl DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
+  <SupportUrl DefaultValue="https://aklaw-sa.com"/>
+  <AppDomains>
+    <AppDomain>https://haideralmrai-lang.github.io</AppDomain>
+    <AppDomain>https://update.aklaw-sa.com</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <FunctionFile resid="Commands.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="AKGroup">
+                <Label resid="AKGroup.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="AKOpenBtn">
+                  <Label resid="AKOpenBtn.Label"/>
+                  <Supertip>
+                    <Title resid="AKOpenBtn.Label"/>
+                    <Description resid="AKOpenBtn.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>AKTaskpane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://aklaw-sa.com"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="مساعد AK للصياغة"/>
+        <bt:String id="AKGroup.Label" DefaultValue="مساعد AK"/>
+        <bt:String id="AKOpenBtn.Label" DefaultValue="أدوات الصياغة"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="أدوات الصياغة القانونية والذكاء الصناعي لمكتب الراشد."/>
+        <bt:String id="AKOpenBtn.Tooltip" DefaultValue="افتح لوحة أدوات الصياغة القانونية والذكاء."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

@@ -47,6 +47,9 @@ input:focus{outline:none;border-color:var(--gold)}
 .files{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px}
 .fchip{font-size:.72rem;font-weight:700;background:#eef2f7;border:1px solid var(--line);border-radius:20px;padding:4px 10px;display:flex;align-items:center;gap:6px}
 .fchip .x{cursor:pointer;color:#c0392b;font-weight:900}
+.toolbar{display:flex;gap:8px;padding:7px 12px 0;background:#fff;flex:0 0 auto}
+.tbtn{font-size:.78rem;font-weight:800;color:var(--g);background:#eef7f2;border:1px solid #cfe6da;border-radius:9px;padding:7px 12px;cursor:pointer}
+.tbtn:hover{background:#e3f0e9}
 .inbar{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:#fff;align-items:flex-end;flex:0 0 auto}
 .inbar textarea{flex:1;resize:none;height:44px;max-height:130px;padding:11px 12px;border:1.5px solid var(--line);border-radius:12px;font-size:.9rem;font-family:inherit}
 .inbar textarea:focus{outline:none;border-color:var(--gold)}
@@ -92,6 +95,7 @@ input:focus{outline:none;border-color:var(--gold)}
       </div>
     </div>
     <div id="files" class="files"></div>
+    <div class="toolbar"><button id="lhBtn" class="tbtn">📄 طبّق الورق الرسمي</button></div>
     <div class="inbar">
       <input id="fileInput" type="file" accept=".pdf,image/*,audio/*,video/*" multiple class="hidden"/>
       <button id="attachBtn" class="iconbtn" title="إرفاق">📎</button>
@@ -220,6 +224,25 @@ Office.onReady(function(){
   $("sendBtn").onclick=function(){ var t=$("chatInput").value.trim(); if(!t) return; $("chatInput").value=""; growInput(); send(t); };
   $("chatInput").oninput=growInput;
   $("chatInput").onkeydown=function(e){ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("sendBtn").click(); } };
+
+  $("lhBtn").onclick=function(){
+    var head='<table dir="rtl" style="width:100%;border-collapse:collapse"><tr>'
+      +'<td style="background:#1a3a2a;padding:9px 14px;text-align:right;vertical-align:middle">'
+      +'<div style="color:#ffffff;font-size:15pt;font-weight:bold">عبدالله خالد الراشد</div>'
+      +'<div style="color:#ffffff;font-size:9pt">للمحاماة والاستشارات القانونية</div></td>'
+      +'<td style="background:#1a3a2a;padding:9px 14px;text-align:left;vertical-align:middle">'
+      +'<div style="color:#c9a25e;font-size:15pt;font-weight:bold">مستند</div>'
+      +'<div style="color:#ffffff;font-size:7pt">C.R. 2051257343 &nbsp; License 439/45 &nbsp; VAT 312388434200003</div></td>'
+      +'</tr></table>';
+    var foot='<p dir="rtl" style="text-align:center;border-top:1px solid #c9a25e;padding-top:4px;color:#5a6b7b;font-size:8pt">'
+      +'شركة عبدالله خالد الراشد للمحاماة والاستشارات القانونية &nbsp;·&nbsp; aklaw-sa.com &nbsp;·&nbsp; الخبر، حي العليا &nbsp;·&nbsp; شكراً لثقتكم</p>';
+    Word.run(function(ctx){
+      var sec=ctx.document.sections.getFirst();
+      sec.getHeader(Word.HeaderFooterType.primary).insertHtml(head, Word.InsertLocation.replace);
+      sec.getFooter(Word.HeaderFooterType.primary).insertHtml(foot, Word.InsertLocation.replace);
+      return ctx.sync();
+    }).catch(function(){ alert("تعذّر تطبيق الورق الرسمي"); });
+  };
 
   window.insertToWord=function(text){
     Word.run(function(ctx){

@@ -9,34 +9,50 @@
 <style>
 :root{--g:#1f5a3e;--gd:#123c2a;--gold:#bd9552;--ink:#17212f;--muted:#64748b;--line:#e3eaf2;--bg:#f4f7f6}
 *{box-sizing:border-box;font-family:"Tajawal",sans-serif}
-body{margin:0;background:var(--bg);color:var(--ink)}
-.hd{background:linear-gradient(135deg,var(--gd),var(--g));color:#fff;padding:18px 16px;display:flex;align-items:center;gap:11px}
-.hd .logo{width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;overflow:hidden}
-.hd .logo img{width:30px;height:30px;object-fit:contain;filter:brightness(0) invert(1)}
-.hd b{display:block;font-size:1rem;font-weight:900}
-.hd span{display:block;font-size:.7rem;opacity:.75}
-.wrap{padding:16px}
-.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 6px 18px rgba(15,23,42,.05);margin-bottom:14px}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;height:100vh}
+.hd{background:linear-gradient(135deg,var(--gd),var(--g));color:#fff;padding:14px 16px;display:flex;align-items:center;gap:11px;flex:0 0 auto}
+.hd .logo{width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.hd .logo img{width:28px;height:28px;object-fit:contain;filter:brightness(0) invert(1)}
+.hd b{display:block;font-size:.98rem;font-weight:900}.hd span{display:block;font-size:.68rem;opacity:.75}
+.tabs{display:flex;background:#fff;border-bottom:1px solid var(--line);flex:0 0 auto}
+.tab{flex:1;padding:11px;text-align:center;font-size:.82rem;font-weight:800;color:var(--muted);cursor:pointer;border-bottom:2.5px solid transparent}
+.tab.on{color:var(--g);border-bottom-color:var(--gold)}
+.body{flex:1 1 auto;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.pane{display:none;flex:1 1 auto;flex-direction:column;min-height:0}
+.pane.on{display:flex}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 6px 18px rgba(15,23,42,.05);margin:14px}
 label{font-size:.8rem;font-weight:700;display:block;margin-bottom:6px}
-input{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:.95rem;margin-bottom:12px}
-input:focus{outline:none;border-color:var(--gold)}
-.btn{width:100%;border:none;border-radius:11px;padding:13px;font-size:.95rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
-.btn-primary{background:var(--g);color:#fff}
-.btn-primary:hover{background:var(--gd)}
-.btn-gold{background:var(--gold);color:#fff}
-.btn-gold:hover{filter:brightness(.95)}
-.btn:disabled{opacity:.6;cursor:default}
-.hint{font-size:.78rem;color:var(--muted);line-height:1.7;margin:0 0 12px}
-.status{font-size:.82rem;font-weight:700;margin-top:12px;padding:10px 12px;border-radius:10px;display:none}
-.status.show{display:block}
-.status.ok{background:#e8f5ee;color:#0f7a4d}
-.status.err{background:#fdecec;color:#c0392b}
-.status.warn{background:#fff7e6;color:#9a6b00}
-.tool-title{font-size:.95rem;font-weight:900;margin:0 0 4px;display:flex;align-items:center;gap:7px}
-.tool-title i{color:var(--gold)}
-.foot{text-align:center;padding:8px}
-.foot a{font-size:.75rem;color:var(--muted);text-decoration:none}
-.hidden{display:none}
+input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:.92rem;font-family:inherit}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold)}
+.btn{border:none;border-radius:11px;padding:12px;font-size:.92rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;width:100%}
+.btn-primary{background:var(--g);color:#fff}.btn-gold{background:var(--gold);color:#fff}
+.btn:disabled{opacity:.55;cursor:default}
+.hint{font-size:.77rem;color:var(--muted);line-height:1.7;margin:0 0 12px}
+.status{font-size:.8rem;font-weight:700;margin-top:10px;padding:9px 11px;border-radius:9px;display:none}
+.status.show{display:block}.status.ok{background:#e8f5ee;color:#0f7a4d}.status.err{background:#fdecec;color:#c0392b}.status.warn{background:#fff7e6;color:#9a6b00}
+.tool-title{font-size:.92rem;font-weight:900;margin:0 0 4px;display:flex;align-items:center;gap:7px}
+/* chat */
+.msgs{flex:1 1 auto;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:92%;padding:10px 12px;border-radius:13px;font-size:.86rem;line-height:1.75;white-space:pre-wrap;word-break:break-word}
+.msg.u{align-self:flex-start;background:var(--g);color:#fff;border-bottom-right-radius:4px}
+.msg.a{align-self:flex-end;background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg .ins{margin-top:8px;font-size:.74rem;font-weight:800;color:var(--g);background:#eef7f2;border:1px solid #cfe6da;border-radius:8px;padding:6px 10px;cursor:pointer;display:inline-flex;gap:5px;align-items:center}
+.msg.empty{align-self:center;color:var(--muted);font-size:.8rem;background:transparent;text-align:center;line-height:1.9}
+.files{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px}
+.chip{font-size:.72rem;font-weight:700;background:#eef2f7;border:1px solid var(--line);border-radius:20px;padding:4px 10px;display:flex;align-items:center;gap:6px}
+.chip .x{cursor:pointer;color:#c0392b;font-weight:900}
+.genbar{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--line);background:#fff;align-items:center}
+.genbar select{flex:1}
+.genbar .btn{width:auto;padding:10px 14px;white-space:nowrap}
+.inbar{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:#fff;align-items:flex-end;flex:0 0 auto}
+.inbar textarea{resize:none;height:42px;max-height:120px}
+.iconbtn{flex:0 0 auto;width:42px;height:42px;border-radius:10px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center}
+.iconbtn.send{background:var(--g);color:#fff;border-color:var(--g)}
+.foot{text-align:center;padding:6px}.foot a{font-size:.74rem;color:var(--muted);text-decoration:none}
+.hidden{display:none!important}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -45,88 +61,186 @@ input:focus{outline:none;border-color:var(--gold)}
     <div><b>مساعد الصياغة</b><span>شركة عبدالله خالد الراشد</span></div>
   </div>
 
-  <div class="wrap">
-    <!-- تسجيل الدخول -->
-    <div id="loginView" class="card">
-      <p class="tool-title">تسجيل الدخول</p>
-      <p class="hint">ادخل باسم مستخدم ووردبريس و Application Password للوصول لأدوات الذكاء.</p>
-      <label>اسم المستخدم</label>
-      <input id="user" type="text" autocomplete="username"/>
-      <label>Application Password</label>
-      <input id="pass" type="password" autocomplete="current-password"/>
-      <button id="loginBtn" class="btn btn-primary">دخول</button>
-      <div id="loginStatus" class="status"></div>
+  <!-- LOGIN -->
+  <div id="loginView" class="card">
+    <p class="tool-title">تسجيل الدخول</p>
+    <p class="hint">ادخل باسم مستخدم ووردبريس و Application Password.</p>
+    <label>اسم المستخدم</label>
+    <input id="user" type="text" autocomplete="username"/>
+    <label style="margin-top:10px">Application Password</label>
+    <input id="pass" type="password" autocomplete="current-password"/>
+    <button id="loginBtn" class="btn btn-primary" style="margin-top:14px">دخول</button>
+    <div id="loginStatus" class="status"></div>
+  </div>
+
+  <!-- APP -->
+  <div id="appView" class="hidden" style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0">
+    <div class="tabs">
+      <div class="tab on" data-pane="case">مساعد القضية</div>
+      <div class="tab" data-pane="style">أسلوب المحامي</div>
     </div>
 
-    <!-- الأدوات -->
-    <div id="toolsView" class="hidden">
-      <div class="card">
-        <p class="tool-title">✦ أسلوب المحامي</p>
-        <p class="hint">حدّد نصاً في المستند ثم اضغط الزر — يعيد الذكاء صياغته بأسلوب المكتب القانوني الرصين ويستبدله مباشرة.</p>
-        <button id="styleBtn" class="btn btn-gold">أعد الصياغة بأسلوب المحامي</button>
-        <div id="styleStatus" class="status"></div>
+    <div class="body">
+      <!-- CASE CHAT -->
+      <div id="paneCase" class="pane on">
+        <div id="msgs" class="msgs">
+          <div class="msg empty">اشرح القضية وارفق المستندات (صك حكم، محضر جلسة، عقد...)،<br/>ثم اختر نوع المستند واضغط «اكتب المستند».</div>
+        </div>
+        <div id="files" class="files"></div>
+        <div class="genbar">
+          <select id="docType">
+            <option value="صحيفة دعوى">صحيفة دعوى</option>
+            <option value="مذكرة جوابية">مذكرة جوابية</option>
+            <option value="لائحة اعتراض">لائحة اعتراض</option>
+            <option value="عقد">عقد</option>
+          </select>
+          <button id="genBtn" class="btn btn-gold">اكتب المستند</button>
+        </div>
+        <div class="inbar">
+          <input id="fileInput" type="file" accept=".pdf,image/*" multiple class="hidden"/>
+          <button id="attachBtn" class="iconbtn" title="إرفاق مستند">📎</button>
+          <textarea id="chatInput" placeholder="اشرح القضية أو اكتب سؤالك..."></textarea>
+          <button id="sendBtn" class="iconbtn send" title="إرسال">➤</button>
+        </div>
       </div>
-      <div class="foot"><a href="#" id="logout">تسجيل خروج</a></div>
+
+      <!-- STYLE -->
+      <div id="paneStyle" class="pane">
+        <div class="card">
+          <p class="tool-title">✦ أسلوب المحامي</p>
+          <p class="hint">حدّد نصاً في المستند ثم اضغط الزر — يعيد الذكاء صياغته بأسلوب المكتب ويستبدله.</p>
+          <button id="styleBtn" class="btn btn-gold">أعد الصياغة بأسلوب المحامي</button>
+          <div id="styleStatus" class="status"></div>
+        </div>
+      </div>
     </div>
+    <div class="foot"><a href="#" id="logout">تسجيل خروج</a></div>
   </div>
 
 <script>
-var API = "https://update.aklaw-sa.com/wp-json/ak/v1/";
+var API="https://update.aklaw-sa.com/wp-json/ak/v1/";
 function $(id){return document.getElementById(id);}
-function setStatus(el,msg,kind){el.className="status show "+(kind||"");el.textContent=msg;}
-function hideStatus(el){el.className="status";}
+function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function token(){return localStorage.getItem("ak_token")||"";}
+function setStatus(el,msg,kind){el.className="status show "+(kind||"");el.textContent=msg;}
 
-function showTools(){ $("loginView").classList.add("hidden"); $("toolsView").classList.remove("hidden"); }
-function showLogin(){ $("toolsView").classList.add("hidden"); $("loginView").classList.remove("hidden"); }
+var chat=[];        // {role:'user'|'model', text}
+var attachments=[]; // {mime,data,name}
 
-Office.onReady(function(info){
-  if(token()) showTools(); else showLogin();
+Office.onReady(function(){
+  if(token()){ $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); }
 
-  $("loginBtn").onclick = function(){
+  // tabs
+  document.querySelectorAll(".tab").forEach(function(t){
+    t.onclick=function(){
+      document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("on");}); t.classList.add("on");
+      $("paneCase").classList.toggle("on", t.dataset.pane==="case");
+      $("paneStyle").classList.toggle("on", t.dataset.pane==="style");
+    };
+  });
+
+  // login
+  $("loginBtn").onclick=function(){
     var u=$("user").value.trim(), p=$("pass").value.replace(/\s/g,"");
-    if(!u||!p){ setStatus($("loginStatus"),"أدخل اسم المستخدم وكلمة المرور","warn"); return; }
-    var t = btoa(u+":"+p);
-    setStatus($("loginStatus"),"جاري التحقق...","warn");
-    $("loginBtn").disabled=true;
+    if(!u||!p){ setStatus($("loginStatus"),"أدخل البيانات","warn"); return; }
+    var t=btoa(u+":"+p); setStatus($("loginStatus"),"جاري التحقق...","warn"); $("loginBtn").disabled=true;
     fetch(API+"ping",{headers:{Authorization:"Basic "+t}})
-      .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
-      .then(function(){ localStorage.setItem("ak_token",t); $("loginBtn").disabled=false; showTools(); })
+      .then(function(r){return r.ok?r.json():Promise.reject();})
+      .then(function(){ localStorage.setItem("ak_token",t); $("loginBtn").disabled=false; $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); })
       .catch(function(){ $("loginBtn").disabled=false; setStatus($("loginStatus"),"تعذّر الدخول. تأكد من البيانات.","err"); });
   };
+  $("logout").onclick=function(e){ e.preventDefault(); localStorage.removeItem("ak_token"); location.reload(); };
 
-  $("logout").onclick = function(e){ e.preventDefault(); localStorage.removeItem("ak_token"); showLogin(); };
+  // attachments
+  $("attachBtn").onclick=function(){ $("fileInput").click(); };
+  $("fileInput").onchange=function(e){
+    var fs=e.target.files;
+    for(var i=0;i<fs.length;i++){ (function(f){
+      var rd=new FileReader();
+      rd.onload=function(){ var d=String(rd.result).split(",")[1]||""; attachments.push({mime:f.type||"application/octet-stream",data:d,name:f.name}); renderFiles(); };
+      rd.readAsDataURL(f);
+    })(fs[i]); }
+    e.target.value="";
+  };
+  function renderFiles(){
+    $("files").innerHTML=attachments.map(function(a,i){return '<span class="chip">📄 '+esc(a.name)+' <span class="x" data-i="'+i+'">×</span></span>';}).join("");
+    $("files").querySelectorAll(".x").forEach(function(x){ x.onclick=function(){ attachments.splice(+this.dataset.i,1); renderFiles(); }; });
+  }
 
-  $("styleBtn").onclick = function(){
+  function renderChat(){
+    var box=$("msgs");
+    if(!chat.length){ box.innerHTML='<div class="msg empty">اشرح القضية وارفق المستندات،<br/>ثم اختر نوع المستند واضغط «اكتب المستند».</div>'; return; }
+    box.innerHTML=chat.map(function(m,i){
+      var cls=m.role==="user"?"u":"a";
+      var ins=m.role==="model"?'<div class="ins" data-i="'+i+'">⬇ أدرج في المستند</div>':'';
+      return '<div class="msg '+cls+'">'+esc(m.text)+ins+'</div>';
+    }).join("");
+    box.querySelectorAll(".ins").forEach(function(b){ b.onclick=function(){ insertToWord(chat[+this.dataset.i].text); }; });
+    box.scrollTop=box.scrollHeight;
+  }
+
+  function callCase(mode,docType){
+    var body={messages:chat,attachments:attachments,mode:mode||"chat",doc_type:docType||""};
+    return fetch(API+"case",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify(body)})
+      .then(function(r){
+        if(r.status===401){ localStorage.removeItem("ak_token"); location.reload(); throw new Error("انتهت الجلسة"); }
+        return r.json().then(function(d){ if(!r.ok) throw new Error(d&&d.message?d.message:"تعذّر"); return d; });
+      });
+  }
+
+  function busy(on,label){
+    $("sendBtn").disabled=on; $("genBtn").disabled=on;
+    $("genBtn").innerHTML=on&&label?'<span class="spin"></span> '+label:'اكتب المستند';
+  }
+
+  function send(text,mode,docType){
+    chat.push({role:"user",text:text}); renderChat();
+    busy(true, mode==="generate"?"جاري الكتابة...":null);
+    if(mode!=="generate"){ chat.push({role:"model",text:"…"}); renderChat(); }
+    callCase(mode,docType).then(function(d){
+      if(mode!=="generate") chat.pop();
+      chat.push({role:"model",text:d.reply}); renderChat(); busy(false);
+    }).catch(function(err){
+      if(mode!=="generate") chat.pop();
+      chat.push({role:"model",text:"⚠️ "+((err&&err.message)||"تعذّر الاتصال")}); renderChat(); busy(false);
+    });
+  }
+
+  $("sendBtn").onclick=function(){
+    var t=$("chatInput").value.trim(); if(!t) return;
+    $("chatInput").value=""; send(t,"chat","");
+  };
+  $("chatInput").onkeydown=function(e){ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("sendBtn").click(); } };
+
+  $("genBtn").onclick=function(){
+    var dt=$("docType").value;
+    send("اكتب «"+dt+"» بناءً على ما شرحته والمرفقات.","generate",dt);
+  };
+
+  // insert into Word
+  window.insertToWord=function(text){
+    Word.run(function(ctx){
+      var paras=text.split(/\n+/).filter(function(p){return p.trim()!=="";});
+      var html=paras.map(function(p){return '<p dir="rtl" style="text-align:right">'+esc(p)+'</p>';}).join("");
+      ctx.document.getSelection().insertHtml(html, Word.InsertLocation.replace);
+      return ctx.sync();
+    }).catch(function(){});
+  };
+
+  // style rewrite
+  $("styleBtn").onclick=function(){
     var st=$("styleStatus");
     Word.run(function(ctx){
-      var sel = ctx.document.getSelection();
-      sel.load("text");
+      var sel=ctx.document.getSelection(); sel.load("text");
       return ctx.sync().then(function(){
-        var text = (sel.text||"").trim();
-        if(!text){ setStatus(st,"حدّد نصاً أولاً ثم اضغط الزر","warn"); return; }
-        setStatus(st,"جاري إعادة الصياغة بأسلوب المحامي...","warn");
-        $("styleBtn").disabled=true;
-        return fetch(API+"style",{
-          method:"POST",
-          headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},
-          body:JSON.stringify({text:text})
-        })
-        .then(function(r){
-          if(r.status===401){ localStorage.removeItem("ak_token"); showLogin(); throw new Error("انتهت الجلسة"); }
-          return r.ok ? r.json() : Promise.reject();
-        })
-        .then(function(d){
-          var newText = (d && d.text) ? d.text : "";
-          if(!newText){ throw new Error("لا نتيجة"); }
-          return Word.run(function(c2){
-            var s2 = c2.document.getSelection();
-            s2.insertText(newText, Word.InsertLocation.replace);
-            return c2.sync();
-          });
-        })
-        .then(function(){ $("styleBtn").disabled=false; setStatus(st,"تمت إعادة الصياغة ✅","ok"); })
-        .catch(function(err){ $("styleBtn").disabled=false; setStatus(st,(err&&err.message)||"تعذّرت إعادة الصياغة","err"); });
+        var text=(sel.text||"").trim();
+        if(!text){ setStatus(st,"حدّد نصاً أولاً","warn"); return; }
+        setStatus(st,"جاري إعادة الصياغة...","warn"); $("styleBtn").disabled=true;
+        return fetch(API+"style",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({text:text})})
+          .then(function(r){ if(r.status===401){localStorage.removeItem("ak_token");location.reload();throw new Error("انتهت الجلسة");} return r.ok?r.json():r.json().then(function(d){throw new Error(d.message||"خطأ");}); })
+          .then(function(d){ return Word.run(function(c2){ c2.document.getSelection().insertText(d.text,Word.InsertLocation.replace); return c2.sync(); }); })
+          .then(function(){ $("styleBtn").disabled=false; setStatus(st,"تمت إعادة الصياغة ✅","ok"); })
+          .catch(function(err){ $("styleBtn").disabled=false; setStatus(st,(err&&err.message)||"تعذّرت","err"); });
       });
     }).catch(function(){ $("styleBtn").disabled=false; setStatus($("styleStatus"),"تعذّر قراءة التحديد","err"); });
   };

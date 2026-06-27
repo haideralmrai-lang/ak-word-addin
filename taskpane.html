@@ -98,6 +98,43 @@ input:focus{outline:none;border-color:var(--gold)}
 var API="https://update.aklaw-sa.com/wp-json/ak/v1/";
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function mdInline(s){ s=esc(s); s=s.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>"); s=s.replace(/__([^_]+)__/g,"<strong>$1</strong>"); return s; }
+function mdParse(text){
+  var lines=String(text||"").replace(/\r/g,"").split("\n"), blocks=[], list=null;
+  function flush(){ if(list){ blocks.push(list); list=null; } }
+  for(var i=0;i<lines.length;i++){ var ln=lines[i].trim();
+    if(ln===""){ flush(); continue; }
+    var num=ln.match(/^(\d+)[\.\)]\s+(.+)$/), bul=ln.match(/^[\*\-•]\s+(.+)$/), hd=ln.match(/^#{1,6}\s*(.+)$/), bold=ln.match(/^\*\*(.+?)\*\*[:：]?\s*$/);
+    if(num){ if(!list||list.type!=="ol"){ flush(); list={type:"ol",items:[]}; } list.items.push(num[2]); }
+    else if(bul){ if(!list||list.type!=="ul"){ flush(); list={type:"ul",items:[]}; } list.items.push(bul[1]); }
+    else if(hd){ flush(); blocks.push({type:"h",text:hd[1]}); }
+    else if(bold){ flush(); blocks.push({type:"h",text:bold[1]}); }
+    else { flush(); blocks.push({type:"p",text:ln}); }
+  }
+  flush(); return blocks;
+}
+function mdToHtml(text){
+  var b=mdParse(text), out="", firstH=true;
+  for(var i=0;i<b.length;i++){ var x=b[i];
+    if(x.type==="h"){ out+= firstH?"<h3>"+mdInline(x.text)+"</h3>":"<h4>"+mdInline(x.text)+"</h4>"; firstH=false; }
+    else if(x.type==="p"){ out+="<p>"+mdInline(x.text)+"</p>"; }
+    else { out+="<"+x.type+">"+x.items.map(function(it){return "<li>"+mdInline(it)+"</li>";}).join("")+"</"+x.type+">"; }
+  }
+  return out||("<p>"+esc(text)+"</p>");
+}
+function mdToWordHtml(text){
+  var b=mdParse(text), out="", firstH=true, rtl="direction:rtl;text-align:right";
+  for(var i=0;i<b.length;i++){ var x=b[i];
+    if(x.type==="h"){
+      out+= firstH ? '<p style="direction:rtl;text-align:center;font-weight:bold;font-size:15pt">'+mdInline(x.text)+'</p>'
+                   : '<p style="'+rtl+';font-weight:bold;font-size:12pt">'+mdInline(x.text)+'</p>';
+      firstH=false;
+    } else if(x.type==="p"){ out+='<p style="'+rtl+'">'+mdInline(x.text)+'</p>'; }
+    else if(x.type==="ol"){ var n=0; x.items.forEach(function(it){ n++; out+='<p style="'+rtl+'">'+n+'. '+mdInline(it)+'</p>'; }); }
+    else { x.items.forEach(function(it){ out+='<p style="'+rtl+'">• '+mdInline(it)+'</p>'; }); }
+  }
+  return out;
+}
 function token(){return localStorage.getItem("ak_token")||"";}
 function setStatus(el,msg,kind){el.className="status show "+(kind||"");el.textContent=msg;}
 var chat=[], attachments=[], working=false;
@@ -121,6 +158,7 @@ Office.onReady(function(){
     c.onclick=function(){
       if(c.dataset.action==="style"){ styleSelection(); return; }
       $("chatInput").value=c.dataset.fill||""; $("chatInput").focus();
+      var t=$("chatInput"); t.style.height="44px"; t.style.height=Math.min(t.scrollHeight,150)+"px";
     };
   });
 
@@ -146,8 +184,9 @@ Office.onReady(function(){
     if($("welcome")) $("welcome").remove();
     box.innerHTML=chat.map(function(m,i){
       var cls=m.role==="user"?"u":"a";
-      var ins=(m.role==="model"&&m.text&&m.text.indexOf("⚠️")!==0)?'<div class="ins" data-i="'+i+'">⬇ أدرج في المستند</div>':'';
-      return '<div class="msg '+cls+'">'+esc(m.text)+ins+'</div>';
+      var body=(m.role==="user")?esc(m.text):mdToHtml(m.text);
+      var ins=(m.role==="model"&&m.text&&m.text.indexOf("⚠️")!==0&&m.text!=="يكتب الآن...")?'<div class="ins" data-i="'+i+'">⬇ أدرج في المستند</div>':'';
+      return '<div class="msg '+cls+'">'+body+ins+'</div>';
     }).join("");
     box.querySelectorAll(".ins").forEach(function(b){ b.onclick=function(){ insertToWord(chat[+this.dataset.i].text); }; });
     box.scrollTop=box.scrollHeight;
@@ -170,7 +209,9 @@ Office.onReady(function(){
       .catch(function(err){ chat.pop(); chat.push({role:"model",text:"⚠️ "+((err&&err.message)||"تعذّر الاتصال")}); renderChat(); setBusy(false); });
   }
 
-  $("sendBtn").onclick=function(){ var t=$("chatInput").value.trim(); if(!t) return; $("chatInput").value=""; send(t); };
+  function growInput(){ var t=$("chatInput"); t.style.height="44px"; t.style.height=Math.min(t.scrollHeight,150)+"px"; }
+  $("sendBtn").onclick=function(){ var t=$("chatInput").value.trim(); if(!t) return; $("chatInput").value=""; growInput(); send(t); };
+  $("chatInput").oninput=growInput;
   $("chatInput").onkeydown=function(e){ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("sendBtn").click(); } };
 
   window.insertToWord=function(text){

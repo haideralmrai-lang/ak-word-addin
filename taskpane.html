@@ -36,6 +36,13 @@ input:focus{outline:none;border-color:var(--gold)}
 .msg.u{align-self:flex-start;background:var(--g);color:#fff;border-bottom-right-radius:4px}
 .msg.a{align-self:flex-end;background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px}
 .msg .ins{margin-top:9px;font-size:.74rem;font-weight:800;color:var(--g);background:#eef7f2;border:1px solid #cfe6da;border-radius:8px;padding:6px 10px;cursor:pointer;display:inline-flex;gap:5px;align-items:center}
+.msg.a{white-space:normal}
+.msg.a h3{font-size:.96rem;font-weight:900;margin:2px 0 8px;color:var(--gd);text-align:center}
+.msg.a h4{font-size:.88rem;font-weight:800;margin:10px 0 3px;color:var(--gd)}
+.msg.a p{margin:0 0 7px}
+.msg.a ol,.msg.a ul{margin:5px 0 9px;padding-right:18px;padding-left:0}
+.msg.a li{margin-bottom:5px}
+.msg.a strong{font-weight:800}
 
 .files{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px}
 .fchip{font-size:.72rem;font-weight:700;background:#eef2f7;border:1px solid var(--line);border-radius:20px;padding:4px 10px;display:flex;align-items:center;gap:6px}
@@ -216,9 +223,7 @@ Office.onReady(function(){
 
   window.insertToWord=function(text){
     Word.run(function(ctx){
-      var paras=text.split(/\n+/).filter(function(p){return p.trim()!=="";});
-      var html=paras.map(function(p){return '<p dir="rtl" style="text-align:right">'+esc(p)+'</p>';}).join("");
-      ctx.document.getSelection().insertHtml(html, Word.InsertLocation.replace);
+      ctx.document.getSelection().insertHtml(mdToWordHtml(text), Word.InsertLocation.replace);
       return ctx.sync();
     }).catch(function(){});
   };

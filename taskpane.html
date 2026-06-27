@@ -225,23 +225,25 @@ Office.onReady(function(){
   $("chatInput").oninput=growInput;
   $("chatInput").onkeydown=function(e){ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("sendBtn").click(); } };
 
+  function loadB64(url){
+    return fetch(url,{cache:"no-store"}).then(function(r){return r.blob();}).then(function(b){
+      return new Promise(function(res,rej){ var rd=new FileReader(); rd.onload=function(){ res(String(rd.result).split(",")[1]); }; rd.onerror=rej; rd.readAsDataURL(b); });
+    });
+  }
   $("lhBtn").onclick=function(){
-    var head='<table dir="rtl" style="width:100%;border-collapse:collapse"><tr>'
-      +'<td style="background:#1a3a2a;padding:9px 14px;text-align:right;vertical-align:middle">'
-      +'<div style="color:#ffffff;font-size:15pt;font-weight:bold">عبدالله خالد الراشد</div>'
-      +'<div style="color:#ffffff;font-size:9pt">للمحاماة والاستشارات القانونية</div></td>'
-      +'<td style="background:#1a3a2a;padding:9px 14px;text-align:left;vertical-align:middle">'
-      +'<div style="color:#c9a25e;font-size:15pt;font-weight:bold">مستند</div>'
-      +'<div style="color:#ffffff;font-size:7pt">C.R. 2051257343 &nbsp; License 439/45 &nbsp; VAT 312388434200003</div></td>'
-      +'</tr></table>';
-    var foot='<p dir="rtl" style="text-align:center;border-top:1px solid #c9a25e;padding-top:4px;color:#5a6b7b;font-size:8pt">'
-      +'شركة عبدالله خالد الراشد للمحاماة والاستشارات القانونية &nbsp;·&nbsp; aklaw-sa.com &nbsp;·&nbsp; الخبر، حي العليا &nbsp;·&nbsp; شكراً لثقتكم</p>';
-    Word.run(function(ctx){
-      var sec=ctx.document.sections.getFirst();
-      sec.getHeader(Word.HeaderFooterType.primary).insertHtml(head, Word.InsertLocation.replace);
-      sec.getFooter(Word.HeaderFooterType.primary).insertHtml(foot, Word.InsertLocation.replace);
-      return ctx.sync();
-    }).catch(function(){ alert("تعذّر تطبيق الورق الرسمي"); });
+    $("lhBtn").disabled=true; var old=$("lhBtn").textContent; $("lhBtn").textContent="جاري التطبيق...";
+    function done(){ $("lhBtn").disabled=false; $("lhBtn").textContent=old; }
+    var dir=location.href.replace(/[^/]*$/,"");
+    Promise.all([loadB64(dir+"letterhead-head.png"),loadB64(dir+"letterhead-foot.png")]).then(function(im){
+      return Word.run(function(ctx){
+        var sec=ctx.document.sections.getFirst();
+        var h=sec.getHeader(Word.HeaderFooterType.primary); h.clear();
+        var ph=h.insertInlinePictureFromBase64(im[0],Word.InsertLocation.replace); ph.lockAspectRatio=true; ph.width=460;
+        var f=sec.getFooter(Word.HeaderFooterType.primary); f.clear();
+        var pf=f.insertInlinePictureFromBase64(im[1],Word.InsertLocation.replace); pf.lockAspectRatio=true; pf.width=460;
+        return ctx.sync();
+      });
+    }).then(done).catch(function(){ done(); alert("تعذّر تطبيق الورق الرسمي — تأكد من نشر صور الترويسة على GitHub"); });
   };
 
   window.insertToWord=function(text){

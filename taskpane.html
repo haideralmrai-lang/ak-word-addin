@@ -84,7 +84,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold)}
       <!-- CASE CHAT -->
       <div id="paneCase" class="pane on">
         <div id="msgs" class="msgs">
-          <div class="msg empty">اشرح القضية وارفق المستندات (صك حكم، محضر جلسة، عقد...)،<br/>ثم اختر نوع المستند واضغط «اكتب المستند».</div>
+          <div class="msg empty">اشرح القضية وارفق المستندات أو التسجيلات الصوتية (صك حكم، محضر جلسة، عقد، تسجيل جلسة...)،<br/>ثم اختر نوع المستند واضغط «اكتب المستند».</div>
         </div>
         <div id="files" class="files"></div>
         <div class="genbar">
@@ -97,7 +97,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold)}
           <button id="genBtn" class="btn btn-gold">اكتب المستند</button>
         </div>
         <div class="inbar">
-          <input id="fileInput" type="file" accept=".pdf,image/*" multiple class="hidden"/>
+          <input id="fileInput" type="file" accept=".pdf,image/*,audio/*,video/*" multiple class="hidden"/>
           <button id="attachBtn" class="iconbtn" title="إرفاق مستند">📎</button>
           <textarea id="chatInput" placeholder="اشرح القضية أو اكتب سؤالك..."></textarea>
           <button id="sendBtn" class="iconbtn send" title="إرسال">➤</button>

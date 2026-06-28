@@ -134,15 +134,17 @@ function mdToHtml(text){
   return out||("<p>"+esc(text)+"</p>");
 }
 function mdToWordHtml(text){
-  var b=mdParse(text), out="", firstH=true, rtl="direction:rtl;text-align:right";
+  var b=mdParse(text), out="", firstH=true;
+  var ff="font-family:Tajawal,Tahoma,Arial";
+  var body=ff+";direction:rtl;text-align:justify;font-size:14pt;line-height:1.7;color:#1a2030;margin:0 0 10pt";
   for(var i=0;i<b.length;i++){ var x=b[i];
     if(x.type==="h"){
-      out+= firstH ? '<p style="direction:rtl;text-align:center;font-weight:bold;font-size:15pt">'+mdInline(x.text)+'</p>'
-                   : '<p style="'+rtl+';font-weight:bold;font-size:12pt">'+mdInline(x.text)+'</p>';
+      out+= firstH ? '<p style="'+ff+';direction:rtl;text-align:center;font-size:22pt;font-weight:bold;color:#15243a;line-height:1.3;margin:0 0 14pt">'+mdInline(x.text)+'</p>'
+                   : '<p style="'+ff+';direction:rtl;text-align:right;font-size:17pt;font-weight:bold;color:#15243a;line-height:1.3;margin:14pt 0 6pt">'+mdInline(x.text)+'</p>';
       firstH=false;
-    } else if(x.type==="p"){ out+='<p style="'+rtl+'">'+mdInline(x.text)+'</p>'; }
-    else if(x.type==="ol"){ var n=0; x.items.forEach(function(it){ n++; out+='<p style="'+rtl+'">'+n+'. '+mdInline(it)+'</p>'; }); }
-    else { x.items.forEach(function(it){ out+='<p style="'+rtl+'">• '+mdInline(it)+'</p>'; }); }
+    } else if(x.type==="p"){ out+='<p style="'+body+'">'+mdInline(x.text)+'</p>'; }
+    else if(x.type==="ol"){ var n=0; x.items.forEach(function(it){ n++; out+='<p style="'+body+'">'+n+'. '+mdInline(it)+'</p>'; }); }
+    else { x.items.forEach(function(it){ out+='<p style="'+body+'">• '+mdInline(it)+'</p>'; }); }
   }
   return out;
 }

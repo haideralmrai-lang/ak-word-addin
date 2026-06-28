@@ -259,8 +259,20 @@ Office.onReady(function(){
         if(r.status===401){ localStorage.removeItem("ak_token"); location.reload(); throw new Error("انتهت الجلسة"); }
         return r.json().then(function(d){ if(!r.ok) throw new Error(d&&d.message?d.message:"تعذّر"); return d; });
       })
-      .then(function(d){ chat.pop(); chat.push({role:"model",text:d.reply}); renderChat(); setBusy(false); })
+      .then(function(d){ if(!d.job_id) throw new Error("تعذّر بدء المعالجة"); pollCase(d.job_id,0); })
       .catch(function(err){ chat.pop(); chat.push({role:"model",text:"⚠️ "+((err&&err.message)||"تعذّر الاتصال")}); renderChat(); setBusy(false); });
+  }
+  function pollCase(jobId,tries){
+    if(tries>150){ chat.pop(); chat.push({role:"model",text:"⚠️ انتهت المهلة — أعد المحاولة"}); renderChat(); setBusy(false); return; }
+    fetch(API+"case/result?job="+encodeURIComponent(jobId),{headers:{Authorization:"Basic "+token()}})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.status==="done"){ chat.pop(); chat.push({role:"model",text:d.reply}); renderChat(); setBusy(false); }
+        else if(d.status==="error"){ chat.pop(); chat.push({role:"model",text:"⚠️ "+(d.error||"تعذّر التوليد")}); renderChat(); setBusy(false); }
+        else if(d.status==="unknown"){ chat.pop(); chat.push({role:"model",text:"⚠️ تعذّر إيجاد المهمة — أعد المحاولة"}); renderChat(); setBusy(false); }
+        else { setTimeout(function(){ pollCase(jobId,tries+1); }, 3000); }
+      })
+      .catch(function(){ setTimeout(function(){ pollCase(jobId,tries+1); }, 3000); });
   }
 
   function growInput(){ var t=$("chatInput"); t.style.height="44px"; t.style.height=Math.min(t.scrollHeight,150)+"px"; }

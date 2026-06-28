@@ -21,7 +21,7 @@
     <Host Name="Document"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=14"/>
+    <SourceLocation DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=15"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -73,8 +73,8 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://aklaw-sa.com"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=14"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=14"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=15"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=15"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="مساعد AK للصياغة"/>

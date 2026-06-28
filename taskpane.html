@@ -182,7 +182,7 @@ Office.onReady(function(){
 
   function uploadFile(f){
     var mime=f.type||"application/octet-stream";
-    if(f.size <= 4*1024*1024){
+    if(f.size <= 1024*1024){
       var rd=new FileReader();
       rd.onload=function(){ attachments.push({mime:mime,name:f.name,data:String(rd.result).split(",")[1]||"",ready:true}); renderFiles(); };
       rd.readAsDataURL(f); return;

@@ -40,7 +40,7 @@ input:focus{outline:none;border-color:var(--gold)}
 .chip:hover{border-color:var(--gold);background:#fffdf8}
 .chip .ic{color:var(--gold);font-size:1rem;flex:0 0 auto}
 
-.msg{max-width:92%;font-size:.87rem;line-height:1.8;word-break:break-word;animation:fade .3s ease}
+.msg{max-width:92%;flex-shrink:0;font-size:.87rem;line-height:1.8;word-break:break-word;animation:fade .3s ease}
 .msg.new{animation:fadeup .38s ease}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes fadeup{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
@@ -61,7 +61,7 @@ input:focus{outline:none;border-color:var(--gold)}
 .acts .ins{flex:1;justify-content:center;background:var(--g);color:#fff;border-color:var(--g)}
 .acts .sec{background:#fff;color:#54635b;border-color:var(--line)}
 
-.think{align-self:flex-end;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--line);border-radius:14px 14px 4px 14px;padding:11px 14px}
+.think{align-self:flex-end;flex-shrink:0;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--line);border-radius:14px 14px 4px 14px;padding:11px 14px}
 .think .av{width:24px;height:24px;border-radius:7px;background:var(--g2);border:1px solid var(--gold);color:var(--gold2);font-size:.62rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .dots{display:flex;gap:4px}
 .dots i{width:7px;height:7px;border-radius:50%;background:var(--g);display:block;animation:bnc 1.2s infinite ease-in-out}

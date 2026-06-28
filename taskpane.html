@@ -243,7 +243,8 @@ Office.onReady(function(){
         var pf=f.insertInlinePictureFromBase64(im[1],Word.InsertLocation.replace); pf.lockAspectRatio=true; pf.width=460;
         return ctx.sync();
       });
-    }).then(done).catch(function(){ done(); alert("تعذّر تطبيق الورق الرسمي — تأكد من نشر صور الترويسة على GitHub"); });
+    }).then(function(){ $("lhBtn").disabled=false; $("lhBtn").textContent="✓ تم تطبيق الورق"; setTimeout(function(){ $("lhBtn").textContent=old; },2500); })
+      .catch(function(e){ done(); alert("تعذّر تطبيق الورق: "+(e&&e.message?e.message:JSON.stringify(e))); });
   };
 
   window.insertToWord=function(text){

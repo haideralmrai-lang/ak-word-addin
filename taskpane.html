@@ -235,12 +235,12 @@ Office.onReady(function(){
     function done(){ $("lhBtn").disabled=false; $("lhBtn").textContent=old; }
     var dir=location.href.replace(/[^/]*$/,"");
     Promise.all([loadB64(dir+"letterhead-head.png"),loadB64(dir+"letterhead-foot.png")]).then(function(im){
+      var hHtml='<table dir="rtl" style="width:100%;border-collapse:collapse"><tr><td style="padding:0;border:none"><img src="data:image/png;base64,'+im[0]+'" style="width:100%"/></td></tr></table>';
+      var fHtml='<table dir="rtl" style="width:100%;border-collapse:collapse"><tr><td style="padding:0;border:none"><img src="data:image/png;base64,'+im[1]+'" style="width:100%"/></td></tr></table>';
       return Word.run(function(ctx){
         var sec=ctx.document.sections.getFirst();
-        var h=sec.getHeader(Word.HeaderFooterType.primary); h.clear();
-        var ph=h.insertInlinePictureFromBase64(im[0],Word.InsertLocation.replace); ph.lockAspectRatio=true; ph.width=460;
-        var f=sec.getFooter(Word.HeaderFooterType.primary); f.clear();
-        var pf=f.insertInlinePictureFromBase64(im[1],Word.InsertLocation.replace); pf.lockAspectRatio=true; pf.width=460;
+        var h=sec.getHeader(Word.HeaderFooterType.primary); h.clear(); h.insertHtml(hHtml,Word.InsertLocation.replace);
+        var f=sec.getFooter(Word.HeaderFooterType.primary); f.clear(); f.insertHtml(fHtml,Word.InsertLocation.replace);
         return ctx.sync();
       });
     }).then(function(){ $("lhBtn").disabled=false; $("lhBtn").textContent="✓ تم تطبيق الورق"; setTimeout(function(){ $("lhBtn").textContent=old; },2500); })

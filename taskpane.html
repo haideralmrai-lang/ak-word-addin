@@ -178,17 +178,37 @@ Office.onReady(function(){
 
   // attachments
   $("attachBtn").onclick=function(){ $("fileInput").click(); };
-  $("fileInput").onchange=function(e){
-    var fs=e.target.files;
-    for(var i=0;i<fs.length;i++){ (function(f){
+  $("fileInput").onchange=function(e){ var fs=e.target.files; for(var i=0;i<fs.length;i++){ uploadFile(fs[i]); } e.target.value=""; };
+
+  function uploadFile(f){
+    var mime=f.type||"application/octet-stream";
+    if(f.size <= 4*1024*1024){
       var rd=new FileReader();
-      rd.onload=function(){ var d=String(rd.result).split(",")[1]||""; attachments.push({mime:f.type||"application/octet-stream",data:d,name:f.name}); renderFiles(); };
-      rd.readAsDataURL(f);
-    })(fs[i]); }
-    e.target.value="";
-  };
+      rd.onload=function(){ attachments.push({mime:mime,name:f.name,data:String(rd.result).split(",")[1]||"",ready:true}); renderFiles(); };
+      rd.readAsDataURL(f); return;
+    }
+    var att={mime:mime,name:f.name,ready:false,prog:"يرفع…"}; attachments.push(att); renderFiles();
+    fetch(API+"upload/start",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({name:f.name,mime:mime,size:f.size})})
+      .then(function(r){return r.ok?r.json():Promise.reject();})
+      .then(function(d){ if(!d.upload_url) throw new Error(); return fetch(d.upload_url,{method:"POST",headers:{"X-Goog-Upload-Offset":"0","X-Goog-Upload-Command":"upload, finalize"},body:f}); })
+      .then(function(r){return r.json();})
+      .then(function(d){ var file=d.file||d; att.uri=file.uri; att._name=file.name||"";
+        if(file.state==="ACTIVE"){ att.ready=true; att.prog=""; renderFiles(); }
+        else { att.prog="يعالج…"; renderFiles(); pollStatus(att); } })
+      .catch(function(){ att.prog="فشل الرفع ✗"; renderFiles(); });
+  }
+  function pollStatus(att){
+    var n=0; var iv=setInterval(function(){ n++;
+      fetch(API+"upload/status?name="+encodeURIComponent(att._name),{headers:{Authorization:"Basic "+token()}})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d.state==="ACTIVE"){ clearInterval(iv); att.ready=true; att.prog=""; if(d.uri)att.uri=d.uri; renderFiles(); }
+          else if(d.state==="FAILED"||n>80){ clearInterval(iv); att.prog="فشل المعالجة ✗"; renderFiles(); }
+        }).catch(function(){});
+    },3000);
+  }
   function renderFiles(){
-    $("files").innerHTML=attachments.map(function(a,i){return '<span class="fchip">📄 '+esc(a.name)+' <span class="x" data-i="'+i+'">×</span></span>';}).join("");
+    $("files").innerHTML=attachments.map(function(a,i){return '<span class="fchip">📄 '+esc(a.name)+(a.prog?' <small style="color:#9a6b00">('+a.prog+')</small>':'')+' <span class="x" data-i="'+i+'">×</span></span>';}).join("");
     $("files").querySelectorAll(".x").forEach(function(x){ x.onclick=function(){ attachments.splice(+this.dataset.i,1); renderFiles(); }; });
   }
 
@@ -213,7 +233,8 @@ Office.onReady(function(){
     chat.push({role:"user",text:text});
     chat.push({role:"model",text:"يكتب الآن..."});
     renderChat(); setBusy(true);
-    var payload={messages:chat.filter(function(m){return m.text!=="يكتب الآن...";}),attachments:attachments,mode:"chat",doc_type:""};
+    var atts=attachments.filter(function(a){return a.ready;}).map(function(a){ return a.uri ? {mime:a.mime,uri:a.uri} : {mime:a.mime,data:a.data}; });
+    var payload={messages:chat.filter(function(m){return m.text!=="يكتب الآن...";}),attachments:atts,mode:"chat",doc_type:""};
     fetch(API+"case",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){
         if(r.status===401){ localStorage.removeItem("ak_token"); location.reload(); throw new Error("انتهت الجلسة"); }

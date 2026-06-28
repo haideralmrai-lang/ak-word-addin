@@ -194,7 +194,7 @@ Office.onReady(function(){
       .catch(function(){ att.prog="فشل الرفع ✗"; renderFiles(); });
   }
   function sendChunks(f,uploadId,att){
-    var CH=2*1024*1024, offset=0;
+    var CH=5*1024*1024, offset=0;
     function step(){
       var end=Math.min(offset+CH,f.size), last=(end>=f.size), blob=f.slice(offset,end);
       return new Promise(function(res,rej){

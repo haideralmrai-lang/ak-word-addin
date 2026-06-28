@@ -187,15 +187,34 @@ Office.onReady(function(){
       rd.onload=function(){ attachments.push({mime:mime,name:f.name,data:String(rd.result).split(",")[1]||"",ready:true}); renderFiles(); };
       rd.readAsDataURL(f); return;
     }
-    var att={mime:mime,name:f.name,ready:false,prog:"يرفع…"}; attachments.push(att); renderFiles();
+    var att={mime:mime,name:f.name,ready:false,prog:"يرفع 0%"}; attachments.push(att); renderFiles();
     fetch(API+"upload/start",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({name:f.name,mime:mime,size:f.size})})
       .then(function(r){return r.ok?r.json():Promise.reject();})
-      .then(function(d){ if(!d.upload_url) throw new Error(); return fetch(d.upload_url,{method:"POST",headers:{"X-Goog-Upload-Offset":"0","X-Goog-Upload-Command":"upload, finalize"},body:f}); })
-      .then(function(r){return r.json();})
-      .then(function(d){ var file=d.file||d; att.uri=file.uri; att._name=file.name||"";
-        if(file.state==="ACTIVE"){ att.ready=true; att.prog=""; renderFiles(); }
-        else { att.prog="يعالج…"; renderFiles(); pollStatus(att); } })
+      .then(function(d){ if(!d.upload_id) throw new Error(); return sendChunks(f,d.upload_id,att); })
       .catch(function(){ att.prog="فشل الرفع ✗"; renderFiles(); });
+  }
+  function sendChunks(f,uploadId,att){
+    var CH=2*1024*1024, offset=0;
+    function step(){
+      var end=Math.min(offset+CH,f.size), last=(end>=f.size), blob=f.slice(offset,end);
+      return new Promise(function(res,rej){
+        var rd=new FileReader();
+        rd.onload=function(){
+          var b64=String(rd.result).split(",")[1]||"";
+          fetch(API+"upload/chunk",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({upload_id:uploadId,offset:offset,last:last,data:b64})})
+            .then(function(r){return r.ok?r.json():Promise.reject();})
+            .then(function(d){
+              offset=end; att.prog="يرفع "+Math.round(offset/f.size*100)+"%"; renderFiles();
+              if(last){ att.uri=d.uri; att._name=d.name;
+                if(d.state==="ACTIVE"){ att.ready=true; att.prog=""; } else { att.prog="يعالج…"; pollStatus(att); }
+                renderFiles(); res();
+              } else { res(step()); }
+            }).catch(rej);
+        };
+        rd.onerror=rej; rd.readAsDataURL(blob);
+      });
+    }
+    return step();
   }
   function pollStatus(att){
     var n=0; var iv=setInterval(function(){ n++;

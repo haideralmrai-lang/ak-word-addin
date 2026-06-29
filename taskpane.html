@@ -333,7 +333,7 @@ Office.onReady(function(){
     fetch(API+"case/result?job="+encodeURIComponent(jobId),{headers:{Authorization:"Basic "+token()}})
       .then(function(r){return r.json();})
       .then(function(d){
-        if(d.status==="done"){ chat.pop(); chat.push({role:"model",text:d.reply}); setBusy(false); renderChat(); }
+        if(d.status==="done"){ chat.pop(); chat.push({role:"model",text:d.reply}); attachments=[]; renderFiles(); setBusy(false); renderChat(); }
         else if(d.status==="error"){ chat.pop(); chat.push({role:"model",text:"⚠️ "+(d.error||"تعذّر التوليد")}); setBusy(false); renderChat(); }
         else if(d.status==="unknown"){ chat.pop(); chat.push({role:"model",text:"⚠️ تعذّر إيجاد المهمة — أعد المحاولة"}); setBusy(false); renderChat(); }
         else { var tm=chat[chat.length-1]; if(tm&&tm.thinking&&d.partial){ tm.partial=d.partial; renderChat(); } setTimeout(function(){ pollCase(jobId,tries+1); }, 1200); }

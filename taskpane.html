@@ -319,7 +319,7 @@ Office.onReady(function(){
     chat.push({role:"model",thinking:true});
     renderChat(); setBusy(true);
     var atts=attachments.filter(function(a){return a.ready;}).map(function(a){ return a.uri ? {mime:a.mime,uri:a.uri} : {mime:a.mime,data:a.data}; });
-    var payload={messages:chat.filter(function(m){return !m.thinking;}),attachments:atts,mode:"chat",doc_type:"",model:"gemini-2.5-pro"};
+    var payload={messages:chat.filter(function(m){return !m.thinking;}),attachments:atts,mode:"chat",doc_type:"",model:"gemini-2.5-flash"};
     fetch(API+"case",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){
         if(r.status===401){ localStorage.removeItem("ak_token"); location.reload(); throw new Error("انتهت الجلسة"); }

@@ -68,8 +68,6 @@ input:focus{outline:none;border-color:var(--gold)}
 .dots i:nth-child(2){animation-delay:.16s}.dots i:nth-child(3){animation-delay:.32s}
 @keyframes bnc{0%,75%,100%{transform:scale(.5);opacity:.35}35%{transform:scale(1);opacity:1}}
 .tlabel{font-size:.79rem;color:var(--muted);font-weight:700;min-width:120px}
-.cursor{display:inline-block;width:7px;height:1em;background:var(--g);margin-right:2px;vertical-align:-2px;border-radius:1px;animation:blink 1s steps(2) infinite}
-@keyframes blink{50%{opacity:0}}
 
 .files{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px}
 .fchip{font-size:.72rem;font-weight:700;background:#fff;border:1px solid var(--line);border-radius:9px;padding:4px 9px;display:flex;align-items:center;gap:6px}
@@ -187,7 +185,7 @@ function mdToWordHtml(text){
 function token(){return localStorage.getItem("ak_token")||"";}
 function setStatus(el,msg,kind){el.className="status show "+(kind||"");el.textContent=msg;}
 var chat=[], attachments=[], working=false;
-var THINK=["يقرأ ويفهم طلبك…","يطالع الأنظمة والمراجع القضائية…","يجهّز الردّ…"];
+var THINK=["يقرأ المستندات المرفقة…","يطالع الأنظمة والمراجع القضائية…","يستحضر أسلوب صياغاتك…","يصوغ المستند باحتراف…"];
 var thinkTimer=null, thinkStage=0;
 function startThinking(){ thinkStage=0; updateThink(); thinkTimer=setInterval(function(){ thinkStage=(thinkStage+1)%THINK.length; updateThink(); },2300); }
 function stopThinking(){ if(thinkTimer){ clearInterval(thinkTimer); thinkTimer=null; } }
@@ -208,7 +206,6 @@ Office.onReady(function(){
   $("logout").onclick=function(e){ e.preventDefault(); localStorage.removeItem("ak_token"); location.reload(); };
 
   $("newChat").onclick=function(){ if(working) return; chat=[]; attachments=[]; renderFiles(); showWelcome(); $("chatInput").value=""; growInput(); };
-
 
   function welcomeHtml(){ return '<div class="welcome"><h2>كيف أساعدك في قضيتك؟</h2><p>ارفق المستندات (عقد، صك، محضر، تسجيل) واشرح، أو ابدأ بأحد هذه:</p><div class="chips">'+
     '<div class="chip" data-fill="حلّل المستندات المرفقة واستخرج الأطراف والوقائع والأرقام."><span class="ic">🔍</span> حلّل المستندات المرفقة</div>'+
@@ -289,7 +286,6 @@ Office.onReady(function(){
     box.innerHTML=chat.map(function(m,i){
       var isNew=(i===last)?" new":"";
       if(m.thinking){
-        if(m.partial){ return '<div class="msg a'+isNew+'"><div class="ahd"><div class="av">AK</div><b>مساعد الصياغة</b></div><div class="body">'+mdToHtml(m.partial)+'<span class="cursor"></span></div></div>'; }
         return '<div class="think'+isNew+'"><div class="av">AK</div><div class="dots"><i></i><i></i><i></i></div><span class="tlabel">'+THINK[0]+'</span></div>';
       }
       if(m.role==="user"){ return '<div class="msg u'+isNew+'">'+esc(m.text)+'</div>'; }
@@ -319,7 +315,7 @@ Office.onReady(function(){
     chat.push({role:"model",thinking:true});
     renderChat(); setBusy(true);
     var atts=attachments.filter(function(a){return a.ready;}).map(function(a){ return a.uri ? {mime:a.mime,uri:a.uri} : {mime:a.mime,data:a.data}; });
-    var payload={messages:chat.filter(function(m){return !m.thinking;}),attachments:atts,mode:"chat",doc_type:"",model:"gemini-2.5-pro"};
+    var payload={messages:chat.filter(function(m){return !m.thinking;}),attachments:atts,mode:"chat",doc_type:""};
     fetch(API+"case",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){
         if(r.status===401){ localStorage.removeItem("ak_token"); location.reload(); throw new Error("انتهت الجلسة"); }
@@ -329,16 +325,16 @@ Office.onReady(function(){
       .catch(function(err){ chat.pop(); chat.push({role:"model",text:"⚠️ "+((err&&err.message)||"تعذّر الاتصال")}); setBusy(false); renderChat(); });
   }
   function pollCase(jobId,tries){
-    if(tries>400){ chat.pop(); chat.push({role:"model",text:"⚠️ انتهت المهلة — أعد المحاولة"}); setBusy(false); renderChat(); return; }
+    if(tries>150){ chat.pop(); chat.push({role:"model",text:"⚠️ انتهت المهلة — أعد المحاولة"}); setBusy(false); renderChat(); return; }
     fetch(API+"case/result?job="+encodeURIComponent(jobId),{headers:{Authorization:"Basic "+token()}})
       .then(function(r){return r.json();})
       .then(function(d){
-        if(d.status==="done"){ chat.pop(); chat.push({role:"model",text:d.reply}); attachments=[]; renderFiles(); setBusy(false); renderChat(); }
+        if(d.status==="done"){ chat.pop(); chat.push({role:"model",text:d.reply}); setBusy(false); renderChat(); }
         else if(d.status==="error"){ chat.pop(); chat.push({role:"model",text:"⚠️ "+(d.error||"تعذّر التوليد")}); setBusy(false); renderChat(); }
         else if(d.status==="unknown"){ chat.pop(); chat.push({role:"model",text:"⚠️ تعذّر إيجاد المهمة — أعد المحاولة"}); setBusy(false); renderChat(); }
-        else { var tm=chat[chat.length-1]; if(tm&&tm.thinking&&d.partial){ tm.partial=d.partial; renderChat(); } setTimeout(function(){ pollCase(jobId,tries+1); }, 1200); }
+        else { setTimeout(function(){ pollCase(jobId,tries+1); }, 3000); }
       })
-      .catch(function(){ setTimeout(function(){ pollCase(jobId,tries+1); }, 1200); });
+      .catch(function(){ setTimeout(function(){ pollCase(jobId,tries+1); }, 3000); });
   }
 
   function growInput(){ var t=$("chatInput"); t.style.height="36px"; t.style.height=Math.min(t.scrollHeight,120)+"px"; }

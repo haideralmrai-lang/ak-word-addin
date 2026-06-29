@@ -81,6 +81,7 @@ input:focus{outline:none;border-color:var(--gold)}
 .toolbar{display:flex;gap:8px;padding:8px 12px 0;background:#fff;flex:0 0 auto}
 .tbtn{font-size:.76rem;font-weight:800;color:var(--g);background:var(--tint);border:1px solid #cfe6da;border-radius:9px;padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
 .tbtn:hover{background:#e3f0e9}
+.msel{font-family:inherit;font-size:.76rem;font-weight:800;color:var(--g);background:var(--tint);border:1px solid #cfe6da;border-radius:9px;padding:6px 8px;cursor:pointer;margin-right:auto}
 .inbar{display:flex;gap:8px;padding:10px 12px;background:#fff;align-items:flex-end;flex:0 0 auto}
 .compose{flex:1;display:flex;align-items:flex-end;gap:6px;background:#f5f7f5;border:1.5px solid var(--line);border-radius:22px;padding:4px 6px 4px 6px;transition:.15s}
 .compose.foc{border-color:var(--gold);background:#fff}
@@ -126,7 +127,15 @@ input:focus{outline:none;border-color:var(--gold)}
       <span class="qc" data-fill="احسب مستحقات نهاية الخدمة بالتفصيل بناءً على المرفقات.">نهاية الخدمة</span>
       <span class="qc" data-action="style">بأسلوبي</span>
     </div>
-    <div class="toolbar"><button id="lhBtn" class="tbtn"><i style="font-style:normal">🏛️</i> طبّق الورق الرسمي</button></div>
+    <div class="toolbar">
+      <button id="lhBtn" class="tbtn"><i style="font-style:normal">🏛️</i> طبّق الورق الرسمي</button>
+      <select id="modelSel" class="msel" title="اختر المحرك">
+        <option value="gemini-2.5-pro">🧠 برو ٢</option>
+        <option value="gemini-3.1-pro-preview">🧠 برو ٣٫١</option>
+        <option value="gemini-2.5-flash">⚡ فلاش ٢</option>
+        <option value="gemini-3.5-flash">⚡ فلاش ٣٫٥</option>
+      </select>
+    </div>
     <div class="inbar">
       <input id="fileInput" type="file" accept=".pdf,image/*,audio/*,video/*" multiple class="hidden"/>
       <div class="compose" id="compose">
@@ -185,7 +194,7 @@ function mdToWordHtml(text){
 function token(){return localStorage.getItem("ak_token")||"";}
 function setStatus(el,msg,kind){el.className="status show "+(kind||"");el.textContent=msg;}
 var chat=[], attachments=[], working=false;
-var THINK=["يقرأ المستندات المرفقة…","يطالع الأنظمة والمراجع القضائية…","يستحضر أسلوب صياغاتك…","يصوغ المستند باحتراف…"];
+var THINK=["يقرأ ويفهم طلبك…","يطالع الأنظمة والمراجع القضائية…","يجهّز الردّ…"];
 var thinkTimer=null, thinkStage=0;
 function startThinking(){ thinkStage=0; updateThink(); thinkTimer=setInterval(function(){ thinkStage=(thinkStage+1)%THINK.length; updateThink(); },2300); }
 function stopThinking(){ if(thinkTimer){ clearInterval(thinkTimer); thinkTimer=null; } }
@@ -206,6 +215,10 @@ Office.onReady(function(){
   $("logout").onclick=function(e){ e.preventDefault(); localStorage.removeItem("ak_token"); location.reload(); };
 
   $("newChat").onclick=function(){ if(working) return; chat=[]; attachments=[]; renderFiles(); showWelcome(); $("chatInput").value=""; growInput(); };
+
+  var msel=$("modelSel");
+  if(msel){ msel.value=localStorage.getItem("ak_model")||"gemini-2.5-pro"; msel.onchange=function(){ localStorage.setItem("ak_model",msel.value); }; }
+  function curModel(){ return (msel&&msel.value)||localStorage.getItem("ak_model")||"gemini-2.5-pro"; }
 
   function welcomeHtml(){ return '<div class="welcome"><h2>كيف أساعدك في قضيتك؟</h2><p>ارفق المستندات (عقد، صك، محضر، تسجيل) واشرح، أو ابدأ بأحد هذه:</p><div class="chips">'+
     '<div class="chip" data-fill="حلّل المستندات المرفقة واستخرج الأطراف والوقائع والأرقام."><span class="ic">🔍</span> حلّل المستندات المرفقة</div>'+
@@ -315,7 +328,7 @@ Office.onReady(function(){
     chat.push({role:"model",thinking:true});
     renderChat(); setBusy(true);
     var atts=attachments.filter(function(a){return a.ready;}).map(function(a){ return a.uri ? {mime:a.mime,uri:a.uri} : {mime:a.mime,data:a.data}; });
-    var payload={messages:chat.filter(function(m){return !m.thinking;}),attachments:atts,mode:"chat",doc_type:""};
+    var payload={messages:chat.filter(function(m){return !m.thinking;}),attachments:atts,mode:"chat",doc_type:"",model:curModel()};
     fetch(API+"case",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){
         if(r.status===401){ localStorage.removeItem("ak_token"); location.reload(); throw new Error("انتهت الجلسة"); }

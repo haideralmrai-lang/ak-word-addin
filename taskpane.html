@@ -752,13 +752,13 @@ Office.onReady(function(){
   window.styleSelection=styleSelection;
   (function finalUiEnhancements(){
     var MODELS=[
-      {id:"gemini-3.5-flash",name:"Gemini 3.5 Flash",note:"ثابت - ذكي وسريع للكتابة والتحليل"},
-      {id:"gemini-3-flash-preview",name:"Gemini 3 Flash",note:"معاينة - أداء قوي بتكلفة أقل"},
-      {id:"gemini-3.1-pro-preview",name:"Gemini 3.1 Pro",note:"معاينة - مهام معقدة واستدلال أعمق"},
-      {id:"gemini-3.1-flash-lite",name:"Gemini 3.1 Flash-Lite",note:"ثابت - سريع ومناسب للمهام الخفيفة"},
-      {id:"gemini-2.5-pro",name:"Gemini 2.5 Pro",note:"استدلال عميق وصياغة قانونية معقدة"},
-      {id:"gemini-2.5-flash",name:"Gemini 2.5 Flash",note:"متوازن وسريع للمهام اليومية"},
-      {id:"gemini-2.5-flash-lite",name:"Gemini 2.5 Flash-Lite",note:"الأسرع والأقل تكلفة في فئة 2.5"}
+      {id:"gemini-2.5-pro",label:"صياغة قانونية متقدمة",name:"Gemini 2.5 Pro",note:"الأفضل للصياغة القانونية والتحليل العميق"},
+      {id:"gemini-3.1-pro-preview",label:"تحليل عميق تجريبي",name:"Gemini 3.1 Pro",note:"قوي للمهام المعقدة، لكنه إصدار معاينة"},
+      {id:"gemini-3.5-flash",label:"الأحدث المتوازن",name:"Gemini 3.5 Flash",note:"سريع وذكي للكتابة والتحليل اليومي"},
+      {id:"gemini-2.5-flash",label:"متوازن يومي",name:"Gemini 2.5 Flash",note:"اختيار سريع ومناسب لمعظم الطلبات"},
+      {id:"gemini-3-flash-preview",label:"سريع تجريبي",name:"Gemini 3 Flash",note:"أداء قوي وسريع، لكنه إصدار معاينة"},
+      {id:"gemini-3.1-flash-lite",label:"خفيف وسريع",name:"Gemini 3.1 Flash-Lite",note:"مناسب للطلبات الخفيفة والردود السريعة"},
+      {id:"gemini-2.5-flash-lite",label:"اقتصادي سريع",name:"Gemini 2.5 Flash-Lite",note:"الأسرع والأخف تكلفة للمهام البسيطة"}
     ];
     var MKEY="ak_word_selected_model_v1", searchText="";
     function selectedModel(){ return localStorage.getItem(MKEY)||"gemini-2.5-pro"; }
@@ -775,8 +775,8 @@ Office.onReady(function(){
       ensureModelPanel();
       var sel=$("modelSelect"), hint=$("modelHint"); if(!sel) return;
       var cur=selectedModel();
-      sel.innerHTML=MODELS.map(function(m){return '<option value="'+m.id+'" '+(m.id===cur?'selected':'')+'>'+m.name+" - "+m.id+'</option>';}).join("");
-      function updateHint(){ var m=MODELS.filter(function(x){return x.id===sel.value;})[0]; if(hint) hint.textContent=m?m.note:""; localStorage.setItem(MKEY,sel.value); }
+      sel.innerHTML=MODELS.map(function(m){return '<option value="'+m.id+'" '+(m.id===cur?'selected':'')+'>'+m.label+" - "+m.name+'</option>';}).join("");
+      function updateHint(){ var m=MODELS.filter(function(x){return x.id===sel.value;})[0]; if(hint) hint.textContent=m?(m.note+" · "+m.id):""; localStorage.setItem(MKEY,sel.value); }
       sel.onchange=updateHint; updateHint();
     }
     function mountToolsPanel(){

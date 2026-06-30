@@ -99,16 +99,13 @@ input:focus{outline:none;border-color:var(--gold)}
 .tools-panel{display:none;margin-top:8px;padding:10px;border:1px solid #e3ebe6;background:#fff;border-radius:14px;box-shadow:0 14px 34px rgba(15,23,42,.08);animation:fadeup .18s ease}
 .chat-tools.open .tools-panel{display:block}
 .quick{display:none;gap:6px;padding:9px 12px 0;overflow-x:auto;flex:0 0 auto;background:#fff}
-#appView.tools-open .quick{display:flex}
 .quick::-webkit-scrollbar{display:none}
 .qc{white-space:nowrap;background:#f6f9f7;border:1px solid #dde7e0;color:var(--g2);border-radius:20px;padding:6px 12px;font-size:.74rem;font-weight:900;cursor:pointer;flex:0 0 auto;transition:.16s ease}
 .qc:hover{background:#fffaf0;border-color:var(--gold)}
 .toolbar{display:none;gap:8px;padding:8px 12px 0;background:#fff;flex:0 0 auto}
-#appView.tools-open .toolbar{display:flex}
 .tbtn{font-size:.76rem;font-weight:800;color:var(--g);background:var(--tint);border:1px solid #cfe6da;border-radius:9px;padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
 .tbtn:hover{background:#e3f0e9}
 .model-panel{display:none;margin:8px 12px 0;padding:10px;border:1px solid #e2ebe6;border-radius:14px;background:#fff}
-#appView.tools-open .model-panel{display:block}
 .chat-tools .model-panel{display:block;margin:0 0 10px}
 .chat-tools .quick,.chat-tools .toolbar{display:flex;padding:0;background:transparent}
 .model-panel label{font-size:.74rem;color:var(--muted);font-weight:900;margin:0 0 6px}
@@ -413,7 +410,10 @@ Office.onReady(function(){
   $("newChat").onclick=function(){ if(working) return; newConversation(); };
   $("historySelect").onchange=function(){ if(working||!this.value) return; openConversation(this.value); };
   $("historyToggle").onclick=function(){ renderHistory(); $("historyBar").classList.toggle("open"); };
-  $("toolsToggle").onclick=function(){ $("appView").classList.toggle("tools-open"); document.querySelector(".chat-tools").classList.toggle("open"); };
+  $("toolsToggle").onclick=function(){
+    $("appView").classList.remove("tools-open");
+    document.querySelector(".chat-tools").classList.toggle("open");
+  };
   $("previewClose").onclick=function(){ $("preview").classList.remove("show"); $("previewBody").innerHTML=""; };
   $("preview").onclick=function(e){ if(e.target===this) $("previewClose").click(); };
 
@@ -760,7 +760,7 @@ Office.onReady(function(){
       {id:"gemini-3.1-flash-lite",label:"خفيف وسريع",name:"Gemini 3.1 Flash-Lite",note:"مناسب للطلبات الخفيفة والردود السريعة"},
       {id:"gemini-2.5-flash-lite",label:"اقتصادي سريع",name:"Gemini 2.5 Flash-Lite",note:"الأسرع والأخف تكلفة للمهام البسيطة"}
     ];
-    var MKEY="ak_word_selected_model_v1", searchText="";
+    var MKEY="ak_word_selected_model_v1";
     function selectedModel(){ return localStorage.getItem(MKEY)||"gemini-2.5-pro"; }
     function ensureModelPanel(){
       if($("modelSelect")) return;
@@ -804,22 +804,18 @@ Office.onReady(function(){
     var oldRenderFiles=window.renderFiles;
     window.renderFiles=function(){ if(oldRenderFiles) oldRenderFiles(); readySummary(); };
     function filteredSessions(){
-      var q=(searchText||"").trim().toLowerCase();
-      var list=sessions().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0) || (b.updated||0)-(a.updated||0); });
-      if(!q) return list;
-      return list.filter(function(s){ return String(s.title||"").toLowerCase().indexOf(q)>=0 || JSON.stringify(s.chat||[]).toLowerCase().indexOf(q)>=0; });
+      return sessions().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0) || (b.updated||0)-(a.updated||0); });
     }
     window.renderHistory=function(){
       var list=filteredSessions(), panel=$("historyPanel"); if(!panel) return;
       var active=sessions().filter(function(s){return s.id===activeSessionId;})[0]||{};
-      var html='<div class="hist-actions"><input id="histSearch" class="hist-search" placeholder="بحث في المحادثات" value="'+esc(searchText)+'"><input id="histName" class="hist-name" placeholder="اسم المحادثة" value="'+esc(active.customTitle||active.title||"")+'"><button id="histRename" class="hist-action">حفظ الاسم</button><button id="histPin" class="hist-action">تثبيت</button><button id="histDelete" class="hist-action danger">حذف</button><button id="histNew" class="hist-action">جديدة</button></div>';
+      var html='<div class="hist-actions"><input id="histName" class="hist-name" placeholder="اسم المحادثة" value="'+esc(active.customTitle||active.title||"")+'"><button id="histRename" class="hist-action">حفظ الاسم</button><button id="histPin" class="hist-action">تثبيت</button><button id="histDelete" class="hist-action danger">حذف</button><button id="histNew" class="hist-action">جديدة</button></div>';
       if(!list.length) html+='<div class="hist-empty">لا توجد محادثات محفوظة بعد</div>';
       else html+=list.map(function(s){
         var d=s.updated?new Date(s.updated):null, dt=d?d.toLocaleDateString("ar-SA",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"";
         return '<button class="hist-item '+(s.id===activeSessionId?'active':'')+'" data-id="'+esc(s.id)+'"><b>'+(s.pinned?'<span class="hist-pin">مثبت</span>':'')+esc(s.customTitle||s.title||"محادثة")+'</b><span>'+esc(dt)+'</span></button>';
       }).join("");
       panel.innerHTML=html;
-      $("histSearch").oninput=function(){ searchText=this.value; renderHistory(); };
       $("histNew").onclick=function(){ newConversation(); $("historyBar").classList.remove("open"); };
       $("histRename").onclick=function(){ var name=($("histName").value||"").trim(); var list=sessions(); list.forEach(function(s){ if(s.id===activeSessionId){ s.customTitle=name; s.title=name||chatTitle(); s.updated=Date.now(); } }); setSessions(list); renderHistory(); };
       $("histPin").onclick=function(){ var list=sessions(); list.forEach(function(s){ if(s.id===activeSessionId){ s.pinned=!s.pinned; s.updated=Date.now(); } }); setSessions(list); renderHistory(); };

@@ -110,7 +110,16 @@ input:focus{outline:none;border-color:var(--gold)}
 .msg-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .msg-file{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 8px;border-radius:9px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);font-size:.72rem;font-weight:800}
 .history-bar{background:#fff;padding:8px 12px;border-bottom:1px solid #edf1ee;flex:0 0 auto}
-.hist{height:34px;width:100%;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--g);font-family:inherit;font-size:.74rem;font-weight:800;padding:0 8px}
+.hist{display:none}
+.hist-toggle{height:36px;width:100%;border:1px solid var(--line);border-radius:12px;background:#f8fbf9;color:var(--g);font-family:inherit;font-size:.78rem;font-weight:900;cursor:pointer}
+.hist-toggle:hover{background:#fffaf0;border-color:var(--gold)}
+.hist-panel{display:none;margin-top:8px;border:1px solid #e1e9e4;background:#fff;border-radius:14px;box-shadow:0 14px 34px rgba(15,23,42,.08);overflow:hidden;max-height:190px;overflow-y:auto}
+.history-bar.open .hist-panel{display:block}
+.hist-empty{padding:12px;color:var(--muted);font-size:.78rem;font-weight:800;text-align:center}
+.hist-item{width:100%;border:0;border-bottom:1px solid #eef2ef;background:#fff;padding:10px 12px;text-align:right;font-family:inherit;cursor:pointer;color:var(--ink)}
+.hist-item:hover,.hist-item.active{background:#f6faf7}
+.hist-item b{display:block;font-size:.8rem;font-weight:900;color:var(--g);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist-item span{display:block;margin-top:2px;font-size:.68rem;color:var(--muted)}
 .inbar{display:flex;gap:8px;padding:10px 12px;background:#fff;align-items:flex-end;flex:0 0 auto}
 .compose{flex:1;display:flex;align-items:flex-end;gap:6px;background:#f7f9f7;border:1.5px solid var(--line);border-radius:22px;padding:4px 6px 4px 6px;transition:.18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
 .compose.foc{border-color:var(--gold);background:#fff;box-shadow:0 0 0 4px rgba(189,149,82,.1)}
@@ -134,6 +143,8 @@ input:focus{outline:none;border-color:var(--gold)}
   </div>
 
   <div id="historyBar" class="history-bar hidden">
+    <button id="historyToggle" class="hist-toggle" type="button">المحادثات السابقة</button>
+    <div id="historyPanel" class="hist-panel"></div>
     <select id="historySelect" class="hist" title="المحادثات السابقة"></select>
   </div>
 
@@ -272,6 +283,42 @@ function initConversations(){
   var list=sessions(); if(list.length){ openConversation(list[0].id); } else { newConversation(); }
   renderHistory();
 }
+function sessions(){
+  try{
+    var list=JSON.parse(localStorage.getItem(SKEY)||"[]")||[];
+    list=list.filter(function(s){return s&&s.id&&Array.isArray(s.chat)&&s.chat.length;});
+    localStorage.setItem(SKEY,JSON.stringify(list.slice(0,30)));
+    return list;
+  }catch(e){return [];}
+}
+function setSessions(v){ localStorage.setItem(SKEY,JSON.stringify((v||[]).filter(function(s){return s&&s.chat&&s.chat.length;}).slice(0,30))); }
+function persistChat(){
+  var clean=chat.filter(function(m){return !m.thinking&&!m.streaming;}).map(function(m){return {role:m.role,text:m.text||"",files:m.files||[]};});
+  if(!clean.length) return;
+  if(!activeSessionId) activeSessionId=sid();
+  var list=sessions().filter(function(s){return s.id!==activeSessionId;});
+  list.unshift({id:activeSessionId,title:chatTitle(),updated:Date.now(),chat:clean});
+  setSessions(list); renderHistory();
+}
+function renderHistory(){
+  var list=sessions(), sel=$("historySelect");
+  if(sel) sel.innerHTML='<option value="">المحادثات السابقة</option>'+list.map(function(s){return '<option value="'+esc(s.id)+'" '+(s.id===activeSessionId?'selected':'')+'>'+esc(s.title||"محادثة")+'</option>';}).join("");
+  var panel=$("historyPanel"); if(!panel) return;
+  if(!list.length){ panel.innerHTML='<div class="hist-empty">لا توجد محادثات محفوظة بعد</div>'; return; }
+  panel.innerHTML=list.map(function(s){
+    var d=s.updated?new Date(s.updated):null;
+    var dt=d?d.toLocaleDateString("ar-SA",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"";
+    return '<button class="hist-item '+(s.id===activeSessionId?'active':'')+'" data-id="'+esc(s.id)+'"><b>'+esc(s.title||"محادثة")+'</b><span>'+esc(dt)+'</span></button>';
+  }).join("");
+  panel.querySelectorAll(".hist-item").forEach(function(b){ b.onclick=function(){ if(working) return; openConversation(this.dataset.id); $("historyBar").classList.remove("open"); }; });
+}
+function newConversation(){
+  activeSessionId=sid(); chat=[]; attachments=[]; renderFiles(); showWelcome(); $("chatInput").value=""; growInput(); renderHistory();
+}
+function initConversations(){
+  var list=sessions(); if(list.length){ openConversation(list[0].id); } else { activeSessionId=sid(); chat=[]; attachments=[]; renderFiles(); showWelcome(); }
+  renderHistory();
+}
 
 Office.onReady(function(){
   if(token()){ $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); initConversations(); }
@@ -289,6 +336,7 @@ Office.onReady(function(){
 
   $("newChat").onclick=function(){ if(working) return; newConversation(); };
   $("historySelect").onchange=function(){ if(working||!this.value) return; openConversation(this.value); };
+  $("historyToggle").onclick=function(){ renderHistory(); $("historyBar").classList.toggle("open"); };
   $("toolsToggle").onclick=function(){ $("appView").classList.toggle("tools-open"); };
 
   function welcomeHtml(){ return '<div class="welcome"><h2>كيف أساعدك في قضيتك؟</h2><p>ارفق المستندات (عقد، صك، محضر، تسجيل) واشرح، أو ابدأ بأحد هذه:</p><div class="chips">'+

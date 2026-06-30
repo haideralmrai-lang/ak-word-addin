@@ -212,6 +212,20 @@ var thinkTimer=null, thinkStage=0;
 function startThinking(){ thinkStage=0; updateThink(); thinkTimer=setInterval(function(){ thinkStage=(thinkStage+1)%THINK.length; updateThink(); },2300); }
 function stopThinking(){ if(thinkTimer){ clearInterval(thinkTimer); thinkTimer=null; } }
 function updateThink(){ var e=document.querySelector(".tlabel"); if(e) e.textContent=THINK[thinkStage]; }
+var PHASE={
+  prep:"يجهز السياق والمراجع",
+  attach:"يربط المرفقات الجاهزة بالطلب",
+  send:"يرسل الطلب إلى Gemini 2.5 Pro",
+  wait:"ينتظر أول جزء من الرد",
+  write:"يكتب الرد الآن",
+  style:"يعيد صياغة النص المحدد",
+  letterhead:"يطبق الورق الرسمي"
+};
+var currentPhase=PHASE.prep;
+function setPhase(text){ currentPhase=text||PHASE.prep; updateThink(); }
+function startThinking(text){ setPhase(text||currentPhase||PHASE.prep); }
+function stopThinking(){}
+function updateThink(){ document.querySelectorAll(".tlabel").forEach(function(e){ e.textContent=currentPhase; }); }
 
 Office.onReady(function(){
   if(token()){ $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); showWelcome(); }
@@ -308,7 +322,7 @@ Office.onReady(function(){
     box.innerHTML=chat.map(function(m,i){
       var isNew=(i===last)?" new":"";
       if(m.thinking){
-        return '<div class="think'+isNew+'"><div class="think-top"><span class="tlabel">'+THINK[0]+'</span><span class="pulse-dot"></span></div><div class="think-flow"><i></i><i></i><i></i></div></div>';
+        return '<div class="think'+isNew+'"><div class="think-top"><span class="tlabel">'+currentPhase+'</span><span class="pulse-dot"></span></div><div class="think-flow"><i></i><i></i><i></i></div></div>';
       }
       if(m.streaming){
         return '<div class="msg a'+isNew+'"><div class="ahd"><div class="av">AK</div><b>مساعد الصياغة</b></div><div class="body" id="streamBody">'+(m.text?mdToHtml(m.text):'')+'</div></div>';
@@ -329,7 +343,7 @@ Office.onReady(function(){
     box.innerHTML=chat.map(function(m,i){
       var isNew=(i===last)?" new":"";
       if(m.thinking){
-        return '<div class="think'+isNew+'"><div class="think-top"><span class="tlabel">'+THINK[0]+'</span><span class="pulse-dot"></span></div><div class="think-flow"><i></i><i></i><i></i></div></div>';
+        return '<div class="think'+isNew+'"><div class="think-top"><span class="tlabel">'+currentPhase+'</span><span class="pulse-dot"></span></div><div class="think-flow"><i></i><i></i><i></i></div></div>';
       }
       if(m.streaming){
         return '<div class="msg a streaming-card'+isNew+'"><div class="ahd"><span class="ai-mark"></span><b>النتيجة قيد الكتابة</b></div><div class="body" id="streamBody">'+(m.text?'<div class="stream-text">'+mdToHtml(m.text)+'</div>':'')+'<div class="stream-loader"><span></span><span></span><span></span></div></div></div>';
@@ -359,6 +373,7 @@ Office.onReady(function(){
     if(working) return;
     if($("welcome")) $("welcome").remove();
     chat.push({role:"user",text:text});
+    setPhase(attachments.some(function(a){return a.ready;})?PHASE.attach:PHASE.prep);
     chat.push({role:"model",thinking:true});
     renderChat(); setBusy(true);
     var atts=attachments.filter(function(a){return a.ready;}).map(function(a){ return a.uri ? {mime:a.mime,uri:a.uri} : {mime:a.mime,data:a.data}; });
@@ -373,6 +388,7 @@ Office.onReady(function(){
   }
 
   function streamGemini(prep,msgs,atts){
+    setPhase(PHASE.wait);
     var contents=[], n=msgs.length;
     for(var i=0;i<n;i++){ var m=msgs[i], role=(m.role==="model")?"model":"user", parts=[{text:String(m.text||"")}];
       if(role==="user"&&i===n-1){ atts.forEach(function(a){ if(a.uri)parts.push({file_data:{mime_type:a.mime,file_uri:a.uri}}); else if(a.data)parts.push({inline_data:{mime_type:a.mime,data:a.data}}); }); }
@@ -403,7 +419,7 @@ Office.onReady(function(){
       });
   }
   function gemErr(t){ try{ var d=JSON.parse(t); return (d.error&&d.error.message)||String(t).slice(0,160); }catch(e){ return String(t||"خطأ من الذكاء").slice(0,160); } }
-  function beginStream(){ stopThinking(); chat[chat.length-1]={role:"model",text:"",streaming:true}; renderChat(); }
+  function beginStream(){ setPhase(PHASE.write); stopThinking(); chat[chat.length-1]={role:"model",text:"",streaming:true}; renderChat(); }
   function updateStream(acc){ var sb=document.getElementById("streamBody"); if(sb) sb.innerHTML=mdToHtml(acc)+'<span class="caret">▍</span>'; var box=$("chat"); if(box) box.scrollTop=box.scrollHeight; }
   function finishOk(acc){ if(!String(acc||"").trim()){ finishErr("لا نتيجة من الذكاء — أعد المحاولة"); return; } chat[chat.length-1]={role:"model",text:acc}; setBusy(false); renderChat(); }
   function finishErr(msg){ if(chat.length&&(chat[chat.length-1].thinking||chat[chat.length-1].streaming)) chat.pop(); chat.push({role:"model",text:"⚠️ "+msg}); setBusy(false); renderChat(); }
@@ -454,6 +470,7 @@ Office.onReady(function(){
         if(!text){ alert("حدّد نصاً في المستند أولاً"); return; }
         if($("welcome")) $("welcome").remove();
         chat.push({role:"user",text:"أعد صياغة النص المحدد بأسلوب المحامي."});
+        setPhase(PHASE.style);
         chat.push({role:"model",thinking:true}); renderChat(); setBusy(true);
         return fetch(API+"style",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({text:text})})
           .then(function(r){ return r.ok?r.json():r.json().then(function(d){throw new Error(d.message||"خطأ");}); })

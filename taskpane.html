@@ -109,6 +109,8 @@ input:focus{outline:none;border-color:var(--gold)}
 .tbtn:hover{background:#e3f0e9}
 .model-panel{display:none;margin:8px 12px 0;padding:10px;border:1px solid #e2ebe6;border-radius:14px;background:#fff}
 #appView.tools-open .model-panel{display:block}
+.chat-tools .model-panel{display:block;margin:0 0 10px}
+.chat-tools .quick,.chat-tools .toolbar{display:flex;padding:0;background:transparent}
 .model-panel label{font-size:.74rem;color:var(--muted);font-weight:900;margin:0 0 6px}
 .model-panel select,.hist-search,.hist-name{width:100%;height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;font-family:inherit;font-size:.78rem;font-weight:800;color:var(--g);padding:0 9px}
 .model-hint{font-size:.68rem;color:var(--muted);font-weight:800;margin-top:6px;line-height:1.5}
@@ -411,7 +413,7 @@ Office.onReady(function(){
   $("newChat").onclick=function(){ if(working) return; newConversation(); };
   $("historySelect").onchange=function(){ if(working||!this.value) return; openConversation(this.value); };
   $("historyToggle").onclick=function(){ renderHistory(); $("historyBar").classList.toggle("open"); };
-  $("toolsToggle").onclick=function(){ $("appView").classList.toggle("tools-open"); };
+  $("toolsToggle").onclick=function(){ $("appView").classList.toggle("tools-open"); document.querySelector(".chat-tools").classList.toggle("open"); };
   $("previewClose").onclick=function(){ $("preview").classList.remove("show"); $("previewBody").innerHTML=""; };
   $("preview").onclick=function(e){ if(e.target===this) $("previewClose").click(); };
 
@@ -777,6 +779,21 @@ Office.onReady(function(){
       function updateHint(){ var m=MODELS.filter(function(x){return x.id===sel.value;})[0]; if(hint) hint.textContent=m?m.note:""; localStorage.setItem(MKEY,sel.value); }
       sel.onchange=updateHint; updateHint();
     }
+    function mountToolsPanel(){
+      var host=document.querySelector(".chat-tools"); if(!host) return;
+      if(host.querySelector(".tools-panel")) return;
+      var panel=document.createElement("div");
+      panel.className="tools-panel";
+      var mp=document.querySelector(".model-panel");
+      var quick=document.querySelector(".quick");
+      var toolbar=document.querySelector(".toolbar");
+      panel.innerHTML='';
+      if(mp) panel.appendChild(mp);
+      if(quick){ var q=quick.cloneNode(true); q.classList.add("tools-quick"); panel.appendChild(q); bindFill(q); }
+      if(toolbar){ var tb=toolbar.cloneNode(true); tb.classList.add("tools-toolbar"); panel.appendChild(tb); }
+      host.appendChild(panel);
+      var lb=panel.querySelector("#lhBtn"); if(lb){ lb.onclick=function(){ document.querySelector(".toolbar #lhBtn").click(); }; }
+    }
     function readySummary(){
       var el=$("attachStatus"); if(!el) return;
       if(!attachments.length){ el.classList.add("hidden"); el.textContent=""; return; }
@@ -833,7 +850,7 @@ Office.onReady(function(){
       };
       try{return oldSend(text);} finally{ setTimeout(function(){window.fetch=oldFetch;},0); }
     };
-    renderModelSelect(); readySummary(); renderHistory();
+    renderModelSelect(); mountToolsPanel(); readySummary(); renderHistory();
   })();
 });
 </script>

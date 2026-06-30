@@ -322,7 +322,7 @@ Office.onReady(function(){
     renderChat(); setBusy(true);
     var atts=attachments.filter(function(a){return a.ready;}).map(function(a){ return a.uri ? {mime:a.mime,uri:a.uri} : {mime:a.mime,data:a.data}; });
     var msgs=chat.filter(function(m){return !m.thinking && !m.streaming;});
-    fetch(API+"prep",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,doc_type:"",model:""})})
+    fetch(API+"prep",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,doc_type:"",model:"gemini-2.5-pro"})})
       .then(function(r){
         if(r.status===401){ localStorage.removeItem("ak_token"); location.reload(); throw new Error("انتهت الجلسة"); }
         return r.json().then(function(d){ if(!r.ok) throw new Error(d&&d.message?d.message:"تعذّر التحضير"); return d; });

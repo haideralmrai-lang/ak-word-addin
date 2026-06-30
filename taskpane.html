@@ -277,7 +277,7 @@ function newConversation(){
 }
 function openConversation(id){
   var s=sessions().filter(function(x){return x.id===id;})[0]; if(!s) return;
-  activeSessionId=s.id; chat=s.chat||[]; attachments=[]; renderFiles(); if(chat.length) renderChat(); else showWelcome(); renderHistory();
+  activeSessionId=s.id; chat=s.chat||[]; attachments=[]; if(window.renderFiles) window.renderFiles(); if(chat.length&&window.renderChat) window.renderChat(); else if(window.showWelcome) window.showWelcome(); renderHistory();
 }
 function initConversations(){
   var list=sessions(); if(list.length){ openConversation(list[0].id); } else { newConversation(); }
@@ -313,15 +313,15 @@ function renderHistory(){
   panel.querySelectorAll(".hist-item").forEach(function(b){ b.onclick=function(){ if(working) return; openConversation(this.dataset.id); $("historyBar").classList.remove("open"); }; });
 }
 function newConversation(){
-  activeSessionId=sid(); chat=[]; attachments=[]; renderFiles(); showWelcome(); $("chatInput").value=""; growInput(); renderHistory();
+  activeSessionId=sid(); chat=[]; attachments=[]; if(window.renderFiles) window.renderFiles(); if(window.showWelcome) window.showWelcome(); if($("chatInput")) $("chatInput").value=""; if(window.growInput) window.growInput(); renderHistory();
 }
 function initConversations(){
-  var list=sessions(); if(list.length){ openConversation(list[0].id); } else { activeSessionId=sid(); chat=[]; attachments=[]; renderFiles(); showWelcome(); }
+  var list=sessions(); if(list.length){ openConversation(list[0].id); } else { activeSessionId=sid(); chat=[]; attachments=[]; if(window.renderFiles) window.renderFiles(); if(window.showWelcome) window.showWelcome(); }
   renderHistory();
 }
 
 Office.onReady(function(){
-  if(token()){ $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); initConversations(); }
+  if(token()){ $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); setTimeout(initConversations,0); }
 
   $("loginBtn").onclick=function(){
     var u=$("user").value.trim(), p=$("pass").value.replace(/\s/g,"");
@@ -329,7 +329,7 @@ Office.onReady(function(){
     var t=btoa(u+":"+p); setStatus($("loginStatus"),"جاري التحقق...","warn"); $("loginBtn").disabled=true;
     fetch(API+"ping",{headers:{Authorization:"Basic "+t}})
       .then(function(r){return r.ok?r.json():Promise.reject();})
-      .then(function(){ localStorage.setItem("ak_token",t); $("loginBtn").disabled=false; $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); initConversations(); })
+      .then(function(){ localStorage.setItem("ak_token",t); $("loginBtn").disabled=false; $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); setTimeout(initConversations,0); })
       .catch(function(){ $("loginBtn").disabled=false; setStatus($("loginStatus"),"تعذّر الدخول. تأكد من البيانات.","err"); });
   };
   $("logout").onclick=function(e){ e.preventDefault(); localStorage.removeItem("ak_token"); location.reload(); };
@@ -556,6 +556,8 @@ Office.onReady(function(){
   function finishErr(msg){ if(chat.length&&(chat[chat.length-1].thinking||chat[chat.length-1].streaming)) chat.pop(); chat.push({role:"model",text:"⚠️ "+msg}); setBusy(false); renderChat(); persistChat(); }
 
   function growInput(){ var t=$("chatInput"); t.style.height="36px"; t.style.height=Math.min(t.scrollHeight,120)+"px"; }
+  window.growInput=growInput;
+  window.renderChat=renderChat;
   $("sendBtn").onclick=function(){ var t=$("chatInput").value.trim(); if(!t) return; $("chatInput").value=""; growInput(); send(t); };
   $("chatInput").oninput=growInput;
   $("chatInput").onfocus=function(){ $("compose").classList.add("foc"); };

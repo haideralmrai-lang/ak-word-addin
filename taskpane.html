@@ -107,8 +107,30 @@ input:focus{outline:none;border-color:var(--gold)}
 #appView.tools-open .toolbar{display:flex}
 .tbtn{font-size:.76rem;font-weight:800;color:var(--g);background:var(--tint);border:1px solid #cfe6da;border-radius:9px;padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
 .tbtn:hover{background:#e3f0e9}
+.model-panel{display:none;margin:8px 12px 0;padding:10px;border:1px solid #e2ebe6;border-radius:14px;background:#fff}
+#appView.tools-open .model-panel{display:block}
+.model-panel label{font-size:.74rem;color:var(--muted);font-weight:900;margin:0 0 6px}
+.model-panel select,.hist-search,.hist-name{width:100%;height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;font-family:inherit;font-size:.78rem;font-weight:800;color:var(--g);padding:0 9px}
+.model-hint{font-size:.68rem;color:var(--muted);font-weight:800;margin-top:6px;line-height:1.5}
+.attach-status{margin:0 12px 7px;padding:8px 10px;border-radius:11px;background:#f7faf8;border:1px solid #dfe8e2;color:var(--g);font-size:.73rem;font-weight:900}
+.hist-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border-bottom:1px solid #eef2ef;background:#fbfdfb}
+.hist-action{height:30px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--g);font-family:inherit;font-size:.72rem;font-weight:900;cursor:pointer}
+.hist-action.danger{color:#b33b32}
+.hist-pin{float:left;color:var(--gold);font-weight:900}
 .msg-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.msg-file{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 8px;border-radius:9px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);font-size:.72rem;font-weight:800}
+.msg-file{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 8px;border-radius:9px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);font-size:.72rem;font-weight:800;color:inherit;cursor:pointer;font-family:inherit}
+.msg-file:hover{background:rgba(255,255,255,.24)}
+.fchip{cursor:pointer}
+.preview{position:fixed;inset:0;z-index:20;background:rgba(8,18,13,.38);display:none;align-items:flex-end;justify-content:center;padding:12px}
+.preview.show{display:flex}
+.preview-box{width:100%;max-width:560px;height:min(78vh,720px);background:#fff;border-radius:18px 18px 12px 12px;box-shadow:0 24px 80px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;animation:fadeup .18s ease}
+.preview-head{height:48px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 12px;border-bottom:1px solid var(--line)}
+.preview-head b{font-size:.82rem;color:var(--g);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preview-head button{width:30px;height:30px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer;font-weight:900;color:var(--g)}
+.preview-body{flex:1;min-height:0;background:#f6f8f6;display:flex;align-items:center;justify-content:center}
+.preview-body iframe,.preview-body img,.preview-body video{width:100%;height:100%;border:0;object-fit:contain;background:#fff}
+.preview-body audio{width:88%}
+.preview-note{padding:16px;text-align:center;color:var(--muted);font-size:.84rem;font-weight:800;line-height:1.7}
 .history-bar{background:#fff;padding:8px 12px;border-bottom:1px solid #edf1ee;flex:0 0 auto}
 .hist{display:none}
 .hist-toggle{height:36px;width:100%;border:1px solid var(--line);border-radius:12px;background:#f8fbf9;color:var(--g);font-family:inherit;font-size:.78rem;font-weight:900;cursor:pointer}
@@ -167,6 +189,7 @@ input:focus{outline:none;border-color:var(--gold)}
   <!-- CHAT -->
   <div id="appView" class="hidden" style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0">
     <div id="chat" class="chat"></div>
+    <div id="attachStatus" class="attach-status hidden"></div>
     <div id="files" class="files"></div>
     <div class="chat-tools"><button id="toolsToggle" class="tools-toggle" type="button">الأدوات السريعة</button></div>
     <div class="quick">
@@ -185,6 +208,13 @@ input:focus{outline:none;border-color:var(--gold)}
       </div>
     </div>
     <div class="foot"><a href="#" id="logout">تسجيل خروج</a></div>
+  </div>
+
+  <div id="preview" class="preview">
+    <div class="preview-box">
+      <div class="preview-head"><b id="previewTitle">معاينة المرفق</b><button id="previewClose" type="button">×</button></div>
+      <div id="previewBody" class="preview-body"></div>
+    </div>
   </div>
 
 <script>
@@ -254,6 +284,28 @@ function startThinking(text){ setPhase(text||currentPhase||PHASE.prep); }
 function stopThinking(){}
 function updateThink(){ document.querySelectorAll(".tlabel").forEach(function(e){ e.textContent=currentPhase; }); }
 var SKEY="ak_word_chat_sessions_v1", activeSessionId="";
+var previewMap={};
+function canInlinePreview(mime){ return /^image\//.test(mime)||mime==="application/pdf"||/^audio\//.test(mime)||/^video\//.test(mime); }
+function fileSrc(f){ return f&&f.previewData ? "data:"+f.mime+";base64,"+f.previewData : (f&&f.previewUrl ? f.previewUrl : ""); }
+function showPreview(file){
+  var p=$("preview"), b=$("previewBody"), t=$("previewTitle"); if(!p||!b||!file) return;
+  var src=fileSrc(file), mime=file.mime||"";
+  t.textContent=file.name||"مرفق"; b.innerHTML="";
+  if(src&&canInlinePreview(mime)){
+    if(/^image\//.test(mime)) b.innerHTML='<img alt="">', b.querySelector("img").src=src;
+    else if(mime==="application/pdf") b.innerHTML='<iframe title="preview"></iframe>', b.querySelector("iframe").src=src;
+    else if(/^audio\//.test(mime)) b.innerHTML='<audio controls></audio>', b.querySelector("audio").src=src;
+    else if(/^video\//.test(mime)) b.innerHTML='<video controls></video>', b.querySelector("video").src=src;
+  } else {
+    b.innerHTML='<div class="preview-note">المعاينة غير متاحة لهذا المرفق. الملفات الكبيرة تحفظ للذكاء أثناء الإرسال، لكن لا يمكن استعراضها بعد إعادة تحميل الإضافة إلا إذا كانت محفوظة كملف صغير.</div>';
+  }
+  p.classList.add("show");
+}
+function bindPreviewClicks(root){
+  (root||document).querySelectorAll("[data-preview]").forEach(function(el){
+    el.onclick=function(e){ e.preventDefault(); e.stopPropagation(); showPreview(previewMap[this.dataset.preview]); };
+  });
+}
 function sid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function sessions(){ try{return JSON.parse(localStorage.getItem(SKEY)||"[]")||[];}catch(e){return [];} }
 function setSessions(v){ localStorage.setItem(SKEY,JSON.stringify(v.slice(0,30))); }
@@ -360,6 +412,8 @@ Office.onReady(function(){
   $("historySelect").onchange=function(){ if(working||!this.value) return; openConversation(this.value); };
   $("historyToggle").onclick=function(){ renderHistory(); $("historyBar").classList.toggle("open"); };
   $("toolsToggle").onclick=function(){ $("appView").classList.toggle("tools-open"); };
+  $("previewClose").onclick=function(){ $("preview").classList.remove("show"); $("previewBody").innerHTML=""; };
+  $("preview").onclick=function(e){ if(e.target===this) $("previewClose").click(); };
 
   function welcomeHtml(){ return '<div class="welcome"><h2>كيف أساعدك في قضيتك؟</h2><p>ارفق المستندات (عقد، صك، محضر، تسجيل) واشرح، أو ابدأ بأحد هذه:</p><div class="chips">'+
     '<div class="chip" data-fill="حلّل المستندات المرفقة واستخرج الأطراف والوقائع والأرقام."><span class="ic">🔍</span> حلّل المستندات المرفقة</div>'+
@@ -397,6 +451,25 @@ Office.onReady(function(){
       .then(function(d){ if(!d.upload_id) throw new Error(); return sendChunks(f,d.upload_id,att); })
       .catch(function(){ att.prog="فشل الرفع ✗"; renderFiles(); });
   }
+  function uploadFile(f){
+    var mime=f.type||"application/octet-stream", previewUrl=URL.createObjectURL(f);
+    if(f.size <= 1024*1024){
+      var rd=new FileReader();
+      rd.onload=function(){
+        var b64=String(rd.result).split(",")[1]||"";
+        attachments.push({mime:mime,name:f.name,data:b64,previewData:(f.size<=650*1024?b64:""),previewUrl:previewUrl,ready:true});
+        renderFiles();
+      };
+      rd.readAsDataURL(f); return;
+    }
+    var att={mime:mime,name:f.name,previewUrl:previewUrl,ready:false,prog:"يرفع 0%"};
+    attachments.push(att); renderFiles();
+    fetch(API+"upload/start",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({name:f.name,mime:mime,size:f.size})})
+      .then(function(r){return r.ok?r.json():Promise.reject();})
+      .then(function(d){ if(!d.upload_id) throw new Error(); return sendChunks(f,d.upload_id,att); })
+      .catch(function(){ att.prog="فشل الرفع"; renderFiles(); });
+  }
+
   function sendChunks(f,uploadId,att){
     var CH=5*1024*1024, offset=0;
     function step(){
@@ -504,6 +577,44 @@ Office.onReady(function(){
     box.scrollTop=box.scrollHeight;
   }
 
+  function renderFiles(){
+    previewMap={};
+    $("files").innerHTML=attachments.map(function(a,i){
+      var id="att-"+i; previewMap[id]=a;
+      return '<span class="fchip" data-preview="'+id+'"><span class="ti">▤</span> '+esc(a.name)+(a.prog?' <small class="pg">('+a.prog+')</small>':'')+' <span class="x" data-i="'+i+'">×</span></span>';
+    }).join("");
+    $("files").querySelectorAll(".x").forEach(function(x){ x.onclick=function(e){ e.stopPropagation(); attachments.splice(+this.dataset.i,1); renderFiles(); }; });
+    bindPreviewClicks($("files"));
+  }
+  window.renderFiles=renderFiles;
+
+  function msgFiles(files,mi){
+    files=files||[];
+    if(!files.length) return "";
+    return '<div class="msg-files">'+files.map(function(f,fi){ var id="msg-"+mi+"-"+fi; previewMap[id]=f; return '<button class="msg-file" data-preview="'+id+'" type="button">▤ '+esc(f.name||"مرفق")+'</button>'; }).join("")+'</div>';
+  }
+  function renderChat(){
+    var box=$("chat"), last=chat.length-1; previewMap={};
+    box.innerHTML=chat.map(function(m,i){
+      var isNew=(i===last)?" new":"";
+      if(m.thinking){
+        return '<div class="think'+isNew+'"><div class="think-top"><span class="tlabel">'+currentPhase+'</span><span class="pulse-dot"></span></div><div class="think-flow"><i></i><i></i><i></i></div></div>';
+      }
+      if(m.streaming){
+        return '<div class="msg a streaming-card'+isNew+'"><div class="ahd"><span class="ai-mark"></span><b>النتيجة قيد الكتابة</b></div><div class="body" id="streamBody">'+(m.text?'<div class="stream-text">'+mdToHtml(m.text)+'</div>':'')+'<div class="stream-loader"><span></span><span></span><span></span></div></div></div>';
+      }
+      if(m.role==="user"){ return '<div class="msg u'+isNew+'">'+esc(m.text)+msgFiles(m.files,i)+'</div>'; }
+      var err=(m.text&&m.text.indexOf("⚠️")===0);
+      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button></div>';
+      return '<div class="msg a'+(err?" err":"")+isNew+'"><div class="ahd"><span class="ai-mark"></span><b>النتيجة</b></div><div class="body">'+mdToHtml(m.text)+'</div>'+acts+'</div>';
+    }).join("");
+    box.querySelectorAll(".ins").forEach(function(b){ b.onclick=function(){ insertToWord(chat[+this.dataset.i].text); }; });
+    box.querySelectorAll("[data-c]").forEach(function(b){ b.onclick=function(){ copyText(chat[+this.dataset.c].text,this); }; });
+    bindPreviewClicks(box);
+    if(working) updateThink();
+    box.scrollTop=box.scrollHeight;
+  }
+
   function copyText(t,btn){
     function ok(){ var o=btn.textContent; btn.textContent="✓ نُسخ"; setTimeout(function(){btn.textContent=o;},1500); }
     if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(ok,function(){fallback(t,ok);}); }
@@ -518,7 +629,7 @@ Office.onReady(function(){
     if(working) return;
     if($("welcome")) $("welcome").remove();
     var pendingAtts=attachments.filter(function(a){return a.ready;});
-    var sentFiles=attachments.map(function(a){return {name:a.name,mime:a.mime,prog:a.prog||""};});
+    var sentFiles=attachments.map(function(a){return {name:a.name,mime:a.mime,prog:a.prog||"",previewData:a.previewData||"",previewUrl:a.previewUrl||""};});
     chat.push({role:"user",text:text,files:sentFiles});
     setPhase(pendingAtts.length?PHASE.attach:PHASE.prep);
     attachments=[]; renderFiles();
@@ -637,6 +748,93 @@ Office.onReady(function(){
     }).catch(function(){ setBusy(false); });
   }
   window.styleSelection=styleSelection;
+  (function finalUiEnhancements(){
+    var MODELS=[
+      {id:"gemini-3.5-flash",name:"Gemini 3.5 Flash",note:"ثابت - ذكي وسريع للكتابة والتحليل"},
+      {id:"gemini-3-flash-preview",name:"Gemini 3 Flash",note:"معاينة - أداء قوي بتكلفة أقل"},
+      {id:"gemini-3.1-pro-preview",name:"Gemini 3.1 Pro",note:"معاينة - مهام معقدة واستدلال أعمق"},
+      {id:"gemini-3.1-flash-lite",name:"Gemini 3.1 Flash-Lite",note:"ثابت - سريع ومناسب للمهام الخفيفة"},
+      {id:"gemini-2.5-pro",name:"Gemini 2.5 Pro",note:"استدلال عميق وصياغة قانونية معقدة"},
+      {id:"gemini-2.5-flash",name:"Gemini 2.5 Flash",note:"متوازن وسريع للمهام اليومية"},
+      {id:"gemini-2.5-flash-lite",name:"Gemini 2.5 Flash-Lite",note:"الأسرع والأقل تكلفة في فئة 2.5"}
+    ];
+    var MKEY="ak_word_selected_model_v1", searchText="";
+    function selectedModel(){ return localStorage.getItem(MKEY)||"gemini-2.5-pro"; }
+    function ensureModelPanel(){
+      if($("modelSelect")) return;
+      var toolbar=document.querySelector(".toolbar");
+      if(!toolbar) return;
+      var div=document.createElement("div");
+      div.className="model-panel";
+      div.innerHTML='<label for="modelSelect">موديل الذكاء الحالي</label><select id="modelSelect"></select><div id="modelHint" class="model-hint"></div>';
+      toolbar.parentNode.insertBefore(div,toolbar);
+    }
+    function renderModelSelect(){
+      ensureModelPanel();
+      var sel=$("modelSelect"), hint=$("modelHint"); if(!sel) return;
+      var cur=selectedModel();
+      sel.innerHTML=MODELS.map(function(m){return '<option value="'+m.id+'" '+(m.id===cur?'selected':'')+'>'+m.name+" - "+m.id+'</option>';}).join("");
+      function updateHint(){ var m=MODELS.filter(function(x){return x.id===sel.value;})[0]; if(hint) hint.textContent=m?m.note:""; localStorage.setItem(MKEY,sel.value); }
+      sel.onchange=updateHint; updateHint();
+    }
+    function readySummary(){
+      var el=$("attachStatus"); if(!el) return;
+      if(!attachments.length){ el.classList.add("hidden"); el.textContent=""; return; }
+      var ready=attachments.filter(function(a){return a.ready;}).length, total=attachments.length;
+      el.classList.remove("hidden");
+      el.textContent=ready===total ? "كل المرفقات جاهزة للإرسال ("+ready+"/"+total+")" : "جاري تجهيز المرفقات ("+ready+"/"+total+")";
+    }
+    var oldRenderFiles=window.renderFiles;
+    window.renderFiles=function(){ if(oldRenderFiles) oldRenderFiles(); readySummary(); };
+    function filteredSessions(){
+      var q=(searchText||"").trim().toLowerCase();
+      var list=sessions().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0) || (b.updated||0)-(a.updated||0); });
+      if(!q) return list;
+      return list.filter(function(s){ return String(s.title||"").toLowerCase().indexOf(q)>=0 || JSON.stringify(s.chat||[]).toLowerCase().indexOf(q)>=0; });
+    }
+    window.renderHistory=function(){
+      var list=filteredSessions(), panel=$("historyPanel"); if(!panel) return;
+      var active=sessions().filter(function(s){return s.id===activeSessionId;})[0]||{};
+      var html='<div class="hist-actions"><input id="histSearch" class="hist-search" placeholder="بحث في المحادثات" value="'+esc(searchText)+'"><input id="histName" class="hist-name" placeholder="اسم المحادثة" value="'+esc(active.customTitle||active.title||"")+'"><button id="histRename" class="hist-action">حفظ الاسم</button><button id="histPin" class="hist-action">تثبيت</button><button id="histDelete" class="hist-action danger">حذف</button><button id="histNew" class="hist-action">جديدة</button></div>';
+      if(!list.length) html+='<div class="hist-empty">لا توجد محادثات محفوظة بعد</div>';
+      else html+=list.map(function(s){
+        var d=s.updated?new Date(s.updated):null, dt=d?d.toLocaleDateString("ar-SA",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"";
+        return '<button class="hist-item '+(s.id===activeSessionId?'active':'')+'" data-id="'+esc(s.id)+'"><b>'+(s.pinned?'<span class="hist-pin">مثبت</span>':'')+esc(s.customTitle||s.title||"محادثة")+'</b><span>'+esc(dt)+'</span></button>';
+      }).join("");
+      panel.innerHTML=html;
+      $("histSearch").oninput=function(){ searchText=this.value; renderHistory(); };
+      $("histNew").onclick=function(){ newConversation(); $("historyBar").classList.remove("open"); };
+      $("histRename").onclick=function(){ var name=($("histName").value||"").trim(); var list=sessions(); list.forEach(function(s){ if(s.id===activeSessionId){ s.customTitle=name; s.title=name||chatTitle(); s.updated=Date.now(); } }); setSessions(list); renderHistory(); };
+      $("histPin").onclick=function(){ var list=sessions(); list.forEach(function(s){ if(s.id===activeSessionId){ s.pinned=!s.pinned; s.updated=Date.now(); } }); setSessions(list); renderHistory(); };
+      $("histDelete").onclick=function(){ var list=sessions().filter(function(s){return s.id!==activeSessionId;}); setSessions(list); if(list.length) openConversation(list[0].id); else newConversation(); renderHistory(); };
+      panel.querySelectorAll(".hist-item").forEach(function(b){ b.onclick=function(){ if(working) return; openConversation(this.dataset.id); $("historyBar").classList.remove("open"); }; });
+    };
+    var oldPersist=persistChat;
+    window.persistChat=persistChat=function(){
+      var clean=chat.filter(function(m){return !m.thinking&&!m.streaming;}).map(function(m){return {role:m.role,text:m.text||"",files:m.files||[]};});
+      if(!clean.length) return;
+      if(!activeSessionId) activeSessionId=sid();
+      var list=sessions(), old=list.filter(function(s){return s.id===activeSessionId;})[0]||{};
+      list=list.filter(function(s){return s.id!==activeSessionId;});
+      list.unshift({id:activeSessionId,title:old.customTitle||chatTitle(),customTitle:old.customTitle||"",pinned:!!old.pinned,updated:Date.now(),chat:clean});
+      setSessions(list); renderHistory();
+    };
+    var oldSend=send;
+    send=function(text){
+      var model=selectedModel();
+      var oldFetch=window.fetch;
+      window.fetch=function(url,opts){
+        try{
+          if(String(url).indexOf(API+"prep")===0&&opts&&opts.body){
+            var body=JSON.parse(opts.body); body.model=model; opts.body=JSON.stringify(body);
+          }
+        }catch(e){}
+        return oldFetch.apply(this,arguments);
+      };
+      try{return oldSend(text);} finally{ setTimeout(function(){window.fetch=oldFetch;},0); }
+    };
+    renderModelSelect(); readySummary(); renderHistory();
+  })();
 });
 </script>
 </body>

@@ -149,7 +149,7 @@ function ak_case_process( $messages, $attachments, $mode, $doc_type, $model = ''
         'contents'           => $contents,
         'generationConfig'   => [ 'temperature' => 0.3, 'maxOutputTokens' => 16384 ],
     ];
-    $allowed = [ 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-3.1-pro-preview' ];
+    $allowed = [ 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite' ];
     if ( ! in_array( $model, $allowed, true ) ) $model = 'gemini-2.5-pro';
     $url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . rawurlencode( $key );
     /* نداء واحد بمهلة طويلة — ننتظر برو حتى يكمّل المستند (السيرفر الآن يسمح بـ٣٦٠ ثانية) */
@@ -1352,7 +1352,7 @@ add_action( 'rest_api_init', function () {
             $model    = sanitize_text_field( (string) $req->get_param( 'model' ) );
             if ( ! is_array( $messages ) ) $messages = [];
             if ( empty( $messages ) ) return new WP_Error( 'empty', 'لا توجد رسالة', [ 'status' => 400 ] );
-            $allowed = [ 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-3.1-pro-preview' ];
+            $allowed = [ 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite' ];
             if ( ! in_array( $model, $allowed, true ) ) $model = 'gemini-2.5-pro';
             $key = get_option( 'ak_gemini_api_key', '' );
             if ( ! $key ) return new WP_Error( 'nokey', 'مفتاح الذكاء غير مضبوط', [ 'status' => 500 ] );
@@ -1412,7 +1412,7 @@ add_action( 'rest_api_init', function () {
             $key = get_option( 'ak_gemini_api_key', '' );
             if ( ! $key ) return [ 'ok' => false, 'error' => 'مفتاح الذكاء غير مضبوط' ];
             $model   = sanitize_text_field( (string) $req->get_param( 'model' ) );
-            $allowed = [ 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-3.1-pro-preview' ];
+            $allowed = [ 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite' ];
             $valid   = in_array( $model, $allowed, true );
             if ( ! $valid ) $model = 'gemini-2.5-pro';
 

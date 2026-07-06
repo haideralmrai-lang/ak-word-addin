@@ -332,7 +332,7 @@ function bindPreviewClicks(root){
 }
 function sid(){return "s"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function sessions(){ try{return JSON.parse(localStorage.getItem(SKEY)||"[]")||[];}catch(e){return [];} }
-function setSessions(v){ localStorage.setItem(SKEY,JSON.stringify(v.slice(0,30))); }
+function setSessions(v){ try{ localStorage.setItem(SKEY,JSON.stringify(v.slice(0,30))); }catch(e){} }
 function chatTitle(){
   for(var i=0;i<chat.length;i++){ if(chat[i].role==="user"&&chat[i].text) return String(chat[i].text).replace(/\s+/g," ").slice(0,38); }
   return "محادثة جديدة";
@@ -340,7 +340,7 @@ function chatTitle(){
 function persistChat(){
   if(!activeSessionId) activeSessionId=sid();
   var list=sessions().filter(function(s){return s.id!==activeSessionId;});
-  list.unshift({id:activeSessionId,title:chatTitle(),updated:Date.now(),chat:chat.filter(function(m){return !m.thinking&&!m.streaming;}).map(function(m){return {role:m.role,text:m.text||"",files:m.files||[]};})});
+  list.unshift({id:activeSessionId,title:chatTitle(),updated:Date.now(),chat:chat.filter(function(m){return !m.thinking&&!m.streaming;}).map(function(m){return {role:m.role,text:m.text||"",files:(m.files||[]).map(function(f){return {name:f.name,mime:f.mime};})};})});
   setSessions(list); renderHistory();
 }
 function renderHistory(){
@@ -367,9 +367,9 @@ function sessions(){
     return list;
   }catch(e){return [];}
 }
-function setSessions(v){ localStorage.setItem(SKEY,JSON.stringify((v||[]).filter(function(s){return s&&s.chat&&s.chat.length;}).slice(0,30))); }
+function setSessions(v){ v=(v||[]).filter(function(s){return s&&s.chat&&s.chat.length;}); try{ localStorage.setItem(SKEY,JSON.stringify(v.slice(0,30))); }catch(e){ try{ localStorage.setItem(SKEY,JSON.stringify(v.slice(0,8))); }catch(e2){ try{ localStorage.removeItem(SKEY); }catch(e3){} } } }
 function persistChat(){
-  var clean=chat.filter(function(m){return !m.thinking&&!m.streaming;}).map(function(m){return {role:m.role,text:m.text||"",files:m.files||[]};});
+  var clean=chat.filter(function(m){return !m.thinking&&!m.streaming;}).map(function(m){return {role:m.role,text:m.text||"",files:(m.files||[]).map(function(f){return {name:f.name,mime:f.mime};})};});
   if(!clean.length) return;
   if(!activeSessionId) activeSessionId=sid();
   var list=sessions().filter(function(s){return s.id!==activeSessionId;});
@@ -651,7 +651,7 @@ Office.onReady(function(){
     renderChat(); setBusy(true);
     persistChat();
     var atts=pendingAtts.map(function(a){ return a.uri ? {mime:a.mime,uri:a.uri} : {mime:a.mime,data:a.data}; });
-    var msgs=chat.filter(function(m){return !m.thinking && !m.streaming;});
+    var msgs=chat.filter(function(m){return !m.thinking && !m.streaming;}).map(function(m){return {role:m.role,text:m.text||""};});
     fetch(API+"prep",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({messages:msgs,doc_type:"",model:"gemini-2.5-pro"})})
       .then(function(r){
         if(r.status===401){ localStorage.removeItem("ak_token"); location.reload(); throw new Error("انتهت الجلسة"); }
@@ -836,7 +836,7 @@ Office.onReady(function(){
     };
     var oldPersist=persistChat;
     window.persistChat=persistChat=function(){
-      var clean=chat.filter(function(m){return !m.thinking&&!m.streaming;}).map(function(m){return {role:m.role,text:m.text||"",files:m.files||[]};});
+      var clean=chat.filter(function(m){return !m.thinking&&!m.streaming;}).map(function(m){return {role:m.role,text:m.text||"",files:(m.files||[]).map(function(f){return {name:f.name,mime:f.mime};})};});
       if(!clean.length) return;
       if(!activeSessionId) activeSessionId=sid();
       var list=sessions(), old=list.filter(function(s){return s.id===activeSessionId;})[0]||{};

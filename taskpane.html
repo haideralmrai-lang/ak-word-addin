@@ -478,6 +478,9 @@ Office.onReady(function(){
       .then(function(d){ if(!d.upload_id) throw new Error(); return sendChunks(f,d.upload_id,att); })
       .catch(function(){ att.prog="فشل الرفع ✗"; renderFiles(); });
   }
+  var _aikey=null;
+  function aikey(){ if(_aikey) return Promise.resolve(_aikey); return fetch(API+"aikey",{headers:{Authorization:"Basic "+token()}}).then(function(r){return r.ok?r.json():Promise.reject();}).then(function(d){ if(!d.key) throw new Error(); _aikey=d.key; return _aikey; }); }
+  /* الرفع مباشرة من الجهاز إلى Gemini Files API — بلا مرور بالسيرفر (أسرع وأخصّ) */
   function uploadFile(f){
     var mime=f.type||"application/octet-stream", previewUrl=URL.createObjectURL(f);
     if(f.size <= 1024*1024){
@@ -489,44 +492,24 @@ Office.onReady(function(){
       };
       rd.readAsDataURL(f); return;
     }
-    var att={mime:mime,name:f.name,previewUrl:previewUrl,ready:false,prog:"يرفع 0%"};
+    var att={mime:mime,name:f.name,previewUrl:previewUrl,ready:false,prog:"يرفع…"};
     attachments.push(att); renderFiles();
-    fetch(API+"upload/start",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({name:f.name,mime:mime,size:f.size})})
-      .then(function(r){return r.ok?r.json():Promise.reject();})
-      .then(function(d){ if(!d.upload_id) throw new Error(); return sendChunks(f,d.upload_id,att); })
-      .catch(function(){ att.prog="فشل الرفع"; renderFiles(); });
+    aikey().then(function(key){ return geminiUpload(f,key,att); }).catch(function(){ att.prog="فشل الرفع ✗"; renderFiles(); });
   }
-
-  function sendChunks(f,uploadId,att){
-    var CH=5*1024*1024, offset=0;
-    function step(){
-      var end=Math.min(offset+CH,f.size), last=(end>=f.size), blob=f.slice(offset,end);
-      return new Promise(function(res,rej){
-        var rd=new FileReader();
-        rd.onload=function(){
-          var b64=String(rd.result).split(",")[1]||"";
-          fetch(API+"upload/chunk",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({upload_id:uploadId,offset:offset,last:last,data:b64})})
-            .then(function(r){return r.ok?r.json():Promise.reject();})
-            .then(function(d){
-              offset=end; att.prog="يرفع "+Math.round(offset/f.size*100)+"%"; renderFiles();
-              if(last){ att.uri=d.uri; att._name=d.name;
-                if(d.state==="ACTIVE"){ att.ready=true; att.prog=""; } else { att.prog="يعالج…"; pollStatus(att); }
-                renderFiles(); res();
-              } else { res(step()); }
-            }).catch(rej);
-        };
-        rd.onerror=rej; rd.readAsDataURL(blob);
-      });
-    }
-    return step();
+  function geminiUpload(f,key,att){
+    return fetch("https://generativelanguage.googleapis.com/upload/v1beta/files?key="+encodeURIComponent(key),{method:"POST",headers:{"X-Goog-Upload-Protocol":"resumable","X-Goog-Upload-Command":"start","X-Goog-Upload-Header-Content-Length":String(f.size),"X-Goog-Upload-Header-Content-Type":att.mime,"Content-Type":"application/json"},body:JSON.stringify({file:{display_name:f.name}})})
+      .then(function(r){ var u=r.headers.get("X-Goog-Upload-URL"); if(!u) throw new Error(); return fetch(u,{method:"POST",headers:{"X-Goog-Upload-Command":"upload, finalize","X-Goog-Upload-Offset":"0"},body:f}); })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ var file=(d&&d.file)||d; if(!file||!file.uri) throw new Error(); att.uri=file.uri; att._name=file.name;
+        if(file.state==="ACTIVE"){ att.ready=true; att.prog=""; } else { att.prog="يعالج…"; pollGemini(att,key); } renderFiles(); });
   }
-  function pollStatus(att){
+  function pollGemini(att,key){
     var n=0; var iv=setInterval(function(){ n++;
-      fetch(API+"upload/status?name="+encodeURIComponent(att._name),{headers:{Authorization:"Basic "+token()}})
+      fetch("https://generativelanguage.googleapis.com/v1beta/"+att._name+"?key="+encodeURIComponent(key))
         .then(function(r){return r.json();})
-        .then(function(d){
-          if(d.state==="ACTIVE"){ clearInterval(iv); att.ready=true; att.prog=""; if(d.uri)att.uri=d.uri; renderFiles(); }
-          else if(d.state==="FAILED"||n>80){ clearInterval(iv); att.prog="فشل المعالجة ✗"; renderFiles(); }
+        .then(function(d){ var st=d.state||(d.file&&d.file.state);
+          if(st==="ACTIVE"){ clearInterval(iv); att.ready=true; att.prog=""; renderFiles(); }
+          else if(st==="FAILED"||n>100){ clearInterval(iv); att.prog="فشل المعالجة ✗"; renderFiles(); }
         }).catch(function(){});
     },3000);
   }

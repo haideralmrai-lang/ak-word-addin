@@ -62,6 +62,14 @@ input:focus{outline:none;border-color:var(--gold)}
 .acts button{font-family:inherit;cursor:pointer;border-radius:8px;font-size:.74rem;font-weight:800;padding:7px 10px;display:inline-flex;align-items:center;gap:5px;border:1px solid}
 .acts .ins{flex:1;justify-content:center;background:var(--g);color:#fff;border-color:var(--g)}
 .acts .sec{background:#fff;color:#54635b;border-color:var(--line)}
+.teachbox{margin:0 12px 12px;padding:11px;background:#fbf8f1;border:1px solid #eee3c9;border-radius:11px}
+.tb-h{font-size:.72rem;font-weight:800;color:#7a5e23;margin-bottom:7px}
+.tb-in{width:100%;min-height:56px;border:1.5px solid var(--line);border-radius:9px;padding:8px;font-family:inherit;font-size:.84rem;resize:vertical;outline:none}
+.tb-in:focus{border-color:var(--gold)}
+.tb-a{display:flex;align-items:center;gap:7px;margin-top:7px}
+.tb-send{background:var(--g);color:#fff;border:none;border-radius:8px;padding:6px 13px;font-family:inherit;font-size:.75rem;font-weight:800;cursor:pointer}
+.tb-cancel{background:#fff;color:#54635b;border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-family:inherit;font-size:.75rem;font-weight:800;cursor:pointer}
+.tb-msg{font-size:.73rem;font-weight:800}
 
 .think{align-self:flex-end;flex-shrink:0;width:86%;max-width:320px;background:rgba(255,255,255,.96);border:1px solid rgba(33,65,47,.11);border-radius:16px 16px 5px 16px;padding:13px 14px 12px;box-shadow:0 12px 32px rgba(15,23,42,.07);overflow:hidden}
 .think-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}
@@ -262,6 +270,23 @@ function mdToWordHtml(text){
 }
 function token(){return localStorage.getItem("ak_token")||"";}
 function setStatus(el,msg,kind){el.className="status show "+(kind||"");el.textContent=msg;}
+function openTeach(i,btn){
+  var msg=chat[i]; if(!msg) return; var card=btn.closest(".msg.a"); if(!card||card.querySelector(".teachbox")) return;
+  var box=document.createElement("div"); box.className="teachbox";
+  box.innerHTML='<div class="tb-h">🎓 علّم المساعد — يُرسَل للمدير للاعتماد (لا يُطبَّق قبل موافقته)</div>'
+    +'<textarea class="tb-in" placeholder="اكتب ما تريد أن يتعلّمه — مثل: استخدم «المُدَّعى عليه» · ابدأ الصحيفة بـ..."></textarea>'
+    +'<div class="tb-a"><button class="tb-send">أرسل للمراجعة</button><button class="tb-cancel">إلغاء</button><span class="tb-msg"></span></div>';
+  card.appendChild(box); box.querySelector(".tb-in").focus();
+  box.querySelector(".tb-cancel").onclick=function(){ box.remove(); };
+  box.querySelector(".tb-send").onclick=function(){
+    var note=box.querySelector(".tb-in").value.trim(); if(!note){ box.querySelector(".tb-in").focus(); return; }
+    var b=this; b.disabled=true; b.textContent="…";
+    fetch(API+"learn",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({note:note,example:String(msg.text||"").slice(0,3000)})})
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+      .then(function(res){ if(!res.ok) throw new Error((res.d&&res.d.message)||"تعذّر الإرسال"); var mm=box.querySelector(".tb-msg"); mm.style.color="#1d9e75"; mm.textContent=(res.d&&res.d.message)||"أُرسل ✅"; box.querySelector(".tb-in").disabled=true; b.style.display="none"; box.querySelector(".tb-cancel").textContent="إغلاق"; })
+      .catch(function(e){ b.disabled=false; b.textContent="أرسل للمراجعة"; var mm=box.querySelector(".tb-msg"); mm.style.color="#c0392b"; mm.textContent=(e&&e.message)||"تعذّر الإرسال"; });
+  };
+}
 var chat=[], attachments=[], working=false;
 var THINK=["يقرأ المستندات المرفقة…","يطالع الأنظمة والمراجع القضائية…","يستحضر أسلوب صياغاتك…","يصوغ المستند باحتراف…"];
 var thinkTimer=null, thinkStage=0;
@@ -523,11 +548,12 @@ Office.onReady(function(){
       }
       if(m.role==="user"){ return '<div class="msg u'+isNew+'">'+esc(m.text)+'</div>'; }
       var err=(m.text&&m.text.indexOf("⚠️")===0);
-      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">⬇ إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button></div>';
+      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">⬇ إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button><button class="sec teach" data-t="'+i+'">🎓 علّم</button></div>';
       return '<div class="msg a'+(err?" err":"")+isNew+'"><div class="ahd"><div class="av">AK</div><b>مساعد الصياغة</b></div><div class="body">'+mdToHtml(m.text)+'</div>'+acts+'</div>';
     }).join("");
     box.querySelectorAll(".ins").forEach(function(b){ b.onclick=function(){ insertToWord(chat[+this.dataset.i].text); }; });
     box.querySelectorAll("[data-c]").forEach(function(b){ b.onclick=function(){ copyText(chat[+this.dataset.c].text,this); }; });
+    box.querySelectorAll("[data-t]").forEach(function(b){ b.onclick=function(){ openTeach(+this.dataset.t,this); }; });
     if(working) updateThink();
     box.scrollTop=box.scrollHeight;
   }
@@ -544,11 +570,12 @@ Office.onReady(function(){
       }
       if(m.role==="user"){ return '<div class="msg u'+isNew+'">'+esc(m.text)+'</div>'; }
       var err=(m.text&&m.text.indexOf("⚠️")===0);
-      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button></div>';
+      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button><button class="sec teach" data-t="'+i+'">🎓 علّم</button></div>';
       return '<div class="msg a'+(err?" err":"")+isNew+'"><div class="ahd"><span class="ai-mark"></span><b>النتيجة</b></div><div class="body">'+mdToHtml(m.text)+'</div>'+acts+'</div>';
     }).join("");
     box.querySelectorAll(".ins").forEach(function(b){ b.onclick=function(){ insertToWord(chat[+this.dataset.i].text); }; });
     box.querySelectorAll("[data-c]").forEach(function(b){ b.onclick=function(){ copyText(chat[+this.dataset.c].text,this); }; });
+    box.querySelectorAll("[data-t]").forEach(function(b){ b.onclick=function(){ openTeach(+this.dataset.t,this); }; });
     if(working) updateThink();
     box.scrollTop=box.scrollHeight;
   }
@@ -570,11 +597,12 @@ Office.onReady(function(){
       }
       if(m.role==="user"){ return '<div class="msg u'+isNew+'">'+esc(m.text)+msgFiles(m.files)+'</div>'; }
       var err=(m.text&&m.text.indexOf("⚠️")===0);
-      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button></div>';
+      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button><button class="sec teach" data-t="'+i+'">🎓 علّم</button></div>';
       return '<div class="msg a'+(err?" err":"")+isNew+'"><div class="ahd"><span class="ai-mark"></span><b>النتيجة</b></div><div class="body">'+mdToHtml(m.text)+'</div>'+acts+'</div>';
     }).join("");
     box.querySelectorAll(".ins").forEach(function(b){ b.onclick=function(){ insertToWord(chat[+this.dataset.i].text); }; });
     box.querySelectorAll("[data-c]").forEach(function(b){ b.onclick=function(){ copyText(chat[+this.dataset.c].text,this); }; });
+    box.querySelectorAll("[data-t]").forEach(function(b){ b.onclick=function(){ openTeach(+this.dataset.t,this); }; });
     if(working) updateThink();
     box.scrollTop=box.scrollHeight;
   }
@@ -607,11 +635,12 @@ Office.onReady(function(){
       }
       if(m.role==="user"){ return '<div class="msg u'+isNew+'">'+esc(m.text)+msgFiles(m.files,i)+'</div>'; }
       var err=(m.text&&m.text.indexOf("⚠️")===0);
-      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button></div>';
+      var acts=err?'':'<div class="acts"><button class="ins" data-i="'+i+'">إدراج في Word</button><button class="sec" data-c="'+i+'">نسخ</button><button class="sec teach" data-t="'+i+'">🎓 علّم</button></div>';
       return '<div class="msg a'+(err?" err":"")+isNew+'"><div class="ahd"><span class="ai-mark"></span><b>النتيجة</b></div><div class="body">'+mdToHtml(m.text)+'</div>'+acts+'</div>';
     }).join("");
     box.querySelectorAll(".ins").forEach(function(b){ b.onclick=function(){ insertToWord(chat[+this.dataset.i].text); }; });
     box.querySelectorAll("[data-c]").forEach(function(b){ b.onclick=function(){ copyText(chat[+this.dataset.c].text,this); }; });
+    box.querySelectorAll("[data-t]").forEach(function(b){ b.onclick=function(){ openTeach(+this.dataset.t,this); }; });
     bindPreviewClicks(box);
     if(working) updateThink();
     box.scrollTop=box.scrollHeight;

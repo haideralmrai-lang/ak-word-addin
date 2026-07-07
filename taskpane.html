@@ -211,8 +211,7 @@ input:focus{outline:none;border-color:var(--gold)}
       <input id="fileInput" type="file" accept=".pdf,image/*,audio/*,video/*" multiple class="hidden"/>
       <div class="compose" id="compose">
         <button id="attachBtn" class="cbtn" title="إرفاق">📎</button>
-        <button id="micBtn" class="cbtn" title="إملاء صوتي">🎙️</button>
-        <textarea id="chatInput" placeholder="اكتب طلبك أو أملِ صوتياً 🎙️ أو ارفق مستنداً…"></textarea>
+        <textarea id="chatInput" placeholder="اكتب طلبك أو ارفق مستنداً…"></textarea>
         <button id="sendBtn" class="cbtn send" title="إرسال">↑</button>
       </div>
     </div>
@@ -724,35 +723,31 @@ Office.onReady(function(){
   $("chatInput").onblur=function(){ $("compose").classList.remove("foc"); };
   $("chatInput").onkeydown=function(e){ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("sendBtn").click(); } };
 
-  /* ===== إملاء صوتي (Web Speech) ===== */
-  var _rec=null,_recOn=false,_recBase="";
-  function toggleMic(){
-    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SR){ alert("الإملاء الصوتي غير متاح داخل إضافة Word (قيود Office على المايكروفون).\n\nالبديل: استخدم زر «إملاء / Dictate» في شريط Word نفسه (الشريط الرئيسي)، أو استخدم مساعد الصياغة في المنصة (الويب)."); return; }
-    if(_recOn){ if(_rec) _rec.stop(); return; }
-    _rec=new SR(); _rec.lang="ar-SA"; _rec.continuous=true; _rec.interimResults=true;
-    _recBase=$("chatInput").value;
-    _rec.onresult=function(e){ var interim="",fin=""; for(var i=e.resultIndex;i<e.results.length;i++){ var r=e.results[i]; if(r.isFinal) fin+=r[0].transcript; else interim+=r[0].transcript; } if(fin) _recBase=(_recBase?_recBase.trim()+" ":"")+fin.trim(); $("chatInput").value=(_recBase?_recBase+" ":"")+interim; growInput(); };
-    _rec.onend=function(){ _recOn=false; $("micBtn").classList.remove("rec"); };
-    _rec.onerror=function(ev){ _recOn=false; $("micBtn").classList.remove("rec"); if(ev&&(ev.error==="not-allowed"||ev.error==="service-not-allowed")){ alert("تعذّر الوصول للمايكروفون داخل إضافة Word (قيود Office).\n\nالبديل: زر «إملاء / Dictate» في شريط Word، أو مساعد الصياغة في المنصة."); } };
-    try{ _rec.start(); _recOn=true; $("micBtn").classList.add("rec"); }catch(e){ alert("تعذّر تشغيل الإملاء داخل إضافة Word. استخدم إملاء Word أو المساعد في المنصة."); }
-  }
-  $("micBtn").onclick=toggleMic;
-
-  /* ===== قراءة صوتية (Gemini TTS) ===== */
-  var _tts=null,_ttsBtn=null;
-  function stopSpeak(){ if(_tts){ try{_tts.pause();}catch(e){} _tts=null; } if(_ttsBtn){ _ttsBtn.textContent="🔊 استمع"; _ttsBtn=null; } }
+  /* ===== قراءة صوتية (Gemini TTS عبر Web Audio + تجهيز مسبق) ===== */
+  var _actx=null,_src=null,_ttsBtn=null,_ttsStop=false;
+  function ensureCtx(){ if(!_actx){ try{ _actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(_actx&&_actx.state==="suspended"){ try{_actx.resume();}catch(e){} } return _actx; }
+  function stopSpeak(){ _ttsStop=true; if(_src){ try{_src.stop();}catch(e){} try{_src.disconnect();}catch(e){} _src=null; } if(_ttsBtn){ _ttsBtn.textContent="🔊 استمع"; _ttsBtn=null; } }
   function speakMsg(i,btn){
     if(_ttsBtn===btn){ stopSpeak(); return; }
-    stopSpeak(); _ttsBtn=btn; btn.textContent="⏸ إيقاف";
+    stopSpeak(); _ttsStop=false; _ttsBtn=btn; btn.textContent="⏸ إيقاف"; ensureCtx();
     var text=String((chat[i]||{}).text||"").replace(/[#*_>`~]/g," ").trim();
     if(!text){ stopSpeak(); return; }
-    aikey().then(function(key){ playTts(ttsSplit(text),key,0,btn); }).catch(function(){ btn.textContent="🔊 استمع"; _ttsBtn=null; });
+    aikey().then(function(key){ ttsQueue(ttsSplit(text),key,btn); }).catch(function(){ stopSpeak(); });
   }
-  function ttsSplit(t){ var max=1200,out=[],cur="",parts=String(t).split(/(?<=[\.!\?؟\n])/); parts.forEach(function(p){ if((cur+p).length>max){ if(cur.trim())out.push(cur); cur=p; } else cur+=p; }); if(cur.trim())out.push(cur); return out.length?out:[String(t).slice(0,max)]; }
+  function ttsSplit(t){ t=String(t||"").trim(); var out=[],cur="",parts=t.split(/(?<=[\.!\?؟\n])/); parts.forEach(function(p){ var lim=out.length?900:220; if((cur+p).length>lim){ if(cur.trim())out.push(cur); cur=p; } else cur+=p; }); if(cur.trim())out.push(cur); return out.length?out:[t.slice(0,900)]; }
   function ttsGen(text,key){ var url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key="+encodeURIComponent(key); return fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents:[{parts:[{text:text}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:"Kore"}}}}})}).then(function(r){return r.json();}).then(function(d){ var p=(d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts)||[]; for(var i=0;i<p.length;i++){ if(p[i].inlineData&&p[i].inlineData.data) return {data:p[i].inlineData.data,mime:p[i].inlineData.mimeType||"audio/L16;rate=24000"}; } throw new Error("no audio"); }); }
-  function pcmWav(b64,rate){ var bin=atob(b64),len=bin.length,buf=new ArrayBuffer(44+len),dv=new DataView(buf); function ws(o,s){for(var i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i));} ws(0,"RIFF");dv.setUint32(4,36+len,true);ws(8,"WAVE");ws(12,"fmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,rate,true);dv.setUint32(28,rate*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);ws(36,"data");dv.setUint32(40,len,true); for(var i=0;i<len;i++)dv.setUint8(44+i,bin.charCodeAt(i)); return new Blob([buf],{type:"audio/wav"}); }
-  function playTts(chunks,key,i,btn){ if(_ttsBtn!==btn) return; if(i>=chunks.length){ stopSpeak(); return; } ttsGen(chunks[i],key).then(function(a){ if(_ttsBtn!==btn) return; var rate=parseInt((String(a.mime).match(/rate=(\d+)/)||[])[1]||"24000",10); var url=URL.createObjectURL(pcmWav(a.data,rate)); _tts=new Audio(url); _tts.onended=function(){ URL.revokeObjectURL(url); playTts(chunks,key,i+1,btn); }; _tts.play(); }).catch(function(){ stopSpeak(); }); }
+  function pcmToBuffer(b64,rate){ var bin=atob(b64),len=bin.length,n=len>>1,buf=_actx.createBuffer(1,n||1,rate||24000),ch=buf.getChannelData(0); for(var i=0;i<n;i++){ var s=(bin.charCodeAt(i*2+1)<<8)|bin.charCodeAt(i*2); if(s>=32768)s-=65536; ch[i]=s/32768; } return buf; }
+  function ttsQueue(chunks,key,btn){
+    var idx=0, cache={};
+    function gen(k){ if(k<0||k>=chunks.length) return null; if(!cache[k]) cache[k]=ttsGen(chunks[k],key); return cache[k]; }
+    function playNext(){
+      if(_ttsBtn!==btn||_ttsStop) return;
+      if(idx>=chunks.length){ stopSpeak(); return; }
+      var k=idx++; var p=gen(k); gen(idx);
+      p.then(function(a){ if(_ttsBtn!==btn||_ttsStop) return; ensureCtx(); if(!_actx) throw 0; var rate=parseInt((String(a.mime).match(/rate=(\d+)/)||[])[1]||"24000",10); var buf=pcmToBuffer(a.data,rate); _src=_actx.createBufferSource(); _src.buffer=buf; _src.connect(_actx.destination); _src.onended=playNext; _src.start(); }).catch(function(){ stopSpeak(); });
+    }
+    gen(0); gen(1); playNext();
+  }
 
   function loadB64(url){
     return fetch(url,{cache:"no-store"}).then(function(r){return r.blob();}).then(function(b){

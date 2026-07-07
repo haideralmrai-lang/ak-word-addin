@@ -722,14 +722,14 @@ Office.onReady(function(){
   var _rec=null,_recOn=false,_recBase="";
   function toggleMic(){
     var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SR){ alert("لا يدعم المتصفح الإملاء الصوتي."); return; }
+    if(!SR){ alert("الإملاء الصوتي غير متاح داخل إضافة Word (قيود Office على المايكروفون).\n\nالبديل: استخدم زر «إملاء / Dictate» في شريط Word نفسه (الشريط الرئيسي)، أو استخدم مساعد الصياغة في المنصة (الويب)."); return; }
     if(_recOn){ if(_rec) _rec.stop(); return; }
     _rec=new SR(); _rec.lang="ar-SA"; _rec.continuous=true; _rec.interimResults=true;
     _recBase=$("chatInput").value;
     _rec.onresult=function(e){ var interim="",fin=""; for(var i=e.resultIndex;i<e.results.length;i++){ var r=e.results[i]; if(r.isFinal) fin+=r[0].transcript; else interim+=r[0].transcript; } if(fin) _recBase=(_recBase?_recBase.trim()+" ":"")+fin.trim(); $("chatInput").value=(_recBase?_recBase+" ":"")+interim; growInput(); };
     _rec.onend=function(){ _recOn=false; $("micBtn").classList.remove("rec"); };
-    _rec.onerror=function(){ _recOn=false; $("micBtn").classList.remove("rec"); };
-    try{ _rec.start(); _recOn=true; $("micBtn").classList.add("rec"); }catch(e){}
+    _rec.onerror=function(ev){ _recOn=false; $("micBtn").classList.remove("rec"); if(ev&&(ev.error==="not-allowed"||ev.error==="service-not-allowed")){ alert("تعذّر الوصول للمايكروفون داخل إضافة Word (قيود Office).\n\nالبديل: زر «إملاء / Dictate» في شريط Word، أو مساعد الصياغة في المنصة."); } };
+    try{ _rec.start(); _recOn=true; $("micBtn").classList.add("rec"); }catch(e){ alert("تعذّر تشغيل الإملاء داخل إضافة Word. استخدم إملاء Word أو المساعد في المنصة."); }
   }
   $("micBtn").onclick=toggleMic;
 

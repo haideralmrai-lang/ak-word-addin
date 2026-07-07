@@ -420,8 +420,14 @@ function initConversations(){
   renderHistory();
 }
 
+/* ===== حفظ سحابي للمحادثات (بدل localStorage) — يزامن مع الموقع لنفس الحساب ===== */
+var _convos=[];
+function sessions(){ return _convos; }
+function setSessions(v){ _convos=(v||[]).filter(function(s){return s&&s.chat&&s.chat.length;}).slice(0,60); fetch(API+"history",{method:"POST",headers:{Authorization:"Basic "+token(),"Content-Type":"application/json"},body:JSON.stringify({convos:_convos})}).catch(function(){}); }
+function cloudLoadWords(cb){ fetch(API+"history",{headers:{Authorization:"Basic "+token()}}).then(function(r){return r.ok?r.json():{convos:[]};}).then(function(d){ _convos=(d&&d.convos)||[]; if(cb)cb(); }).catch(function(){ if(cb)cb(); }); }
+
 Office.onReady(function(){
-  if(token()){ $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); setTimeout(initConversations,0); }
+  if(token()){ $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); cloudLoadWords(initConversations); }
 
   $("loginBtn").onclick=function(){
     var u=$("user").value.trim(), p=$("pass").value.replace(/\s/g,"");
@@ -429,7 +435,7 @@ Office.onReady(function(){
     var t=btoa(u+":"+p); setStatus($("loginStatus"),"جاري التحقق...","warn"); $("loginBtn").disabled=true;
     fetch(API+"ping",{headers:{Authorization:"Basic "+t}})
       .then(function(r){return r.ok?r.json():Promise.reject();})
-      .then(function(){ localStorage.setItem("ak_token",t); $("loginBtn").disabled=false; $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); setTimeout(initConversations,0); })
+      .then(function(){ localStorage.setItem("ak_token",t); $("loginBtn").disabled=false; $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); $("groundBar").classList.remove("hidden"); $("historyBar").classList.remove("hidden"); $("newChat").classList.remove("hidden"); cloudLoadWords(initConversations); })
       .catch(function(){ $("loginBtn").disabled=false; setStatus($("loginStatus"),"تعذّر الدخول. تأكد من البيانات.","err"); });
   };
   $("logout").onclick=function(e){ e.preventDefault(); localStorage.removeItem("ak_token"); location.reload(); };

@@ -355,7 +355,7 @@ function newConversation(){
 }
 function openConversation(id){
   var s=sessions().filter(function(x){return x.id===id;})[0]; if(!s) return;
-  activeSessionId=s.id; chat=s.chat||[]; attachments=[]; if(window.renderFiles) window.renderFiles(); if(chat.length&&window.renderChat) window.renderChat(); else if(window.showWelcome) window.showWelcome(); renderHistory();
+  activeSessionId=s.id; chat=s.chat||s.messages||[]; attachments=[]; if(window.renderFiles) window.renderFiles(); if(chat.length&&window.renderChat) window.renderChat(); else if(window.showWelcome) window.showWelcome(); renderHistory();
 }
 function initConversations(){
   var list=sessions(); if(list.length){ openConversation(list[0].id); } else { newConversation(); }
@@ -401,7 +401,7 @@ function growInput(){ var t=$("chatInput"); if(!t) return; t.style.height="36px"
 function renderChat(){ if(typeof window.renderChatImpl==="function") return window.renderChatImpl(); }
 function openConversation(id){
   var s=sessions().filter(function(x){return x.id===id;})[0]; if(!s) return;
-  activeSessionId=s.id; chat=s.chat||[]; attachments=[];
+  activeSessionId=s.id; chat=s.chat||s.messages||[]; attachments=[];
   if(window.renderFiles) window.renderFiles();
   if(chat.length) renderChat(); else if(window.showWelcome) window.showWelcome();
   renderHistory();

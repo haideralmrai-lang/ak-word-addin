@@ -223,6 +223,10 @@ body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;he
 .crumbrow a:hover{text-decoration:underline}
 .citem.folder .ic{color:var(--gold)}
 .citem .cnt{font-size:.6rem;font-weight:800;color:var(--muted);background:#f3f6f9;border:1px solid var(--line);border-radius:999px;padding:1px 7px;flex:0 0 auto}
+.citem .ck.fck{cursor:pointer}
+.citem .ck.fck.all{background:var(--green3);border-color:var(--green3)}
+.citem .ck.fck.some{background:#e0b64d;border-color:#d9b978;color:#fff}
+.citem.folder.selall{border-color:var(--green3);background:#eef7f2}
 </style>
 </head>
 <body>
@@ -722,6 +726,15 @@ var caseState={cases:[],view:'cases',caseId:null,caseName:'',atts:[],sel:{},fold
 function folderSvg(){ return '<svg class="doc" viewBox="0 0 24 24" style="width:26px;height:26px" fill="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'; }
 function effParent(f){ var pid=+(f.parent_id||0); return (pid && caseState.fById[pid])?pid:0; }
 function folderOfAtt(a){ var fid=caseState.attFolder[a.id]; fid=(fid!=null)?+fid:0; return (fid && caseState.fById[fid])?fid:0; }
+function collectFolderFiles(fid,seen){ seen=seen||{}; if(seen[fid]) return []; seen[fid]=1;
+  var out=caseState.atts.filter(function(a){return folderOfAtt(a)===fid;});
+  caseState.folders.filter(function(f){return effParent(f)===fid;}).forEach(function(sf){ out=out.concat(collectFolderFiles(+sf.id,seen)); });
+  return out; }
+function folderSelState(fid){ var files=collectFolderFiles(fid); if(!files.length) return 'none';
+  var s=files.filter(function(a){return caseState.sel[a.id];}).length; return s===0?'none':(s===files.length?'all':'some'); }
+function toggleFolderSel(fid){ var files=collectFolderFiles(fid); if(!files.length) return;
+  if(folderSelState(fid)==='all'){ files.forEach(function(a){ delete caseState.sel[a.id]; }); }
+  else { files.forEach(function(a){ caseState.sel[a.id]=a; }); } }
 function openCasePicker(){
   $('caseLayer').classList.add('show'); caseState.view='cases'; caseState.sel={};
   $('caseTitle').textContent='مستندات القضايا'; $('caseSub').textContent='اختر قضية لعرض مرفقاتها';
@@ -794,7 +807,10 @@ function renderCaseLevel(){
   var html=(cur!==0||caseState.path.length)?'<div class="crumbrow">'+crumb+'</div>':'';
   if(!subs.length&&!files.length){ html+='<div class="lmsg">هذا المجلد فارغ.</div>'; }
   if(subs.length){ html+='<div class="sec">المجلدات</div>'+subs.map(function(f){
-    return '<div class="citem folder" data-f="'+f.id+'" data-fn="'+esc(f.name)+'"><span class="ic">'+folderSvg()+'</span><span class="m"><b>'+esc(f.name)+'</b><span>'+folderCount(+f.id)+' عنصر</span></span><span class="cnt">'+folderCount(+f.id)+'</span></div>';
+    var rf=collectFolderFiles(+f.id).length, st=folderSelState(+f.id);
+    var meta=folderCount(+f.id)+' عنصر'+(rf?(' · '+rf+' ملف'):'');
+    var ck=rf?'<span class="ck fck '+st+'" data-fsel="'+f.id+'" title="حدّد المجلد كامل">'+(st==='all'?'✓':(st==='some'?'–':''))+'</span>':'<span class="cnt">'+folderCount(+f.id)+'</span>';
+    return '<div class="citem folder'+(st==='all'?' selall':'')+'" data-f="'+f.id+'" data-fn="'+esc(f.name)+'"><span class="ic">'+folderSvg()+'</span><span class="m"><b>'+esc(f.name)+'</b><span>'+meta+'</span></span>'+ck+'</div>';
   }).join(''); }
   if(files.length){ html+='<div class="sec">الملفات</div>'+files.map(function(a){ return fileItemHtml(a,''); }).join(''); }
   $('caseList').innerHTML=html;
@@ -803,8 +819,12 @@ function renderCaseLevel(){
     else { var idx=caseState.path.map(function(p){return p.id;}).indexOf(id); if(idx>=0) caseState.path=caseState.path.slice(0,idx+1); caseState.cur=id; }
     renderCaseLevel();
   }; });
-  $('caseList').querySelectorAll('.citem.folder').forEach(function(d){ d.onclick=function(){
+  $('caseList').querySelectorAll('.citem.folder').forEach(function(d){ d.onclick=function(e){
+    if(e.target.closest('[data-fsel]')) return;
     caseState.path.push({id:+this.dataset.f,name:this.dataset.fn}); caseState.cur=+this.dataset.f; renderCaseLevel();
+  }; });
+  $('caseList').querySelectorAll('[data-fsel]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation();
+    toggleFolderSel(+this.dataset.fsel); renderCaseLevel(); updateCaseCnt();
   }; });
   wireFileClicks();
 }

@@ -281,14 +281,6 @@ body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;he
           <div class="pmenu">
             <button data-act="file"><svg viewBox="0 0 24 24"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.5a1.6 1.6 0 0 1-2.3-2.3l7.9-7.9"/></svg><span>إرفاق ملف من جهازك<span class="sub">صورة · PDF · Word · Excel · فيديو · صوت</span></span></button>
             <button data-act="case"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>من مستندات القضايا<span class="sub">اختر من أرشيف القضية مباشرة</span></span></button>
-            <div class="divi"></div>
-            <div class="ttl">توليد مستند كامل</div>
-            <button data-gen="صحيفة دعوى"><svg viewBox="0 0 24 24"><path d="M4 3h11l5 5v13H4z"/><path d="M15 3v5h5"/></svg><span>صحيفة دعوى</span></button>
-            <button data-gen="مذكرة جوابية"><svg viewBox="0 0 24 24"><path d="M4 3h11l5 5v13H4z"/><path d="M15 3v5h5"/></svg><span>مذكرة جوابية</span></button>
-            <button data-gen="لائحة اعتراض"><svg viewBox="0 0 24 24"><path d="M4 3h11l5 5v13H4z"/><path d="M15 3v5h5"/></svg><span>لائحة اعتراض</span></button>
-            <div class="divi"></div>
-            <button data-act="style"><svg viewBox="0 0 24 24"><path d="M12 3l2.5 6L21 9l-5 4 2 7-6-4-6 4 2-7-5-4 6.5 0z"/></svg><span>صِغ النص المحدد بأسلوبي<span class="sub">حدّد نصاً في المستند ثم اختر</span></span></button>
-            <button data-act="letter"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg><span>طبّق الورق الرسمي<span class="sub">ترويسة وتذييل المكتب</span></span></button>
           </div>
         </div>
         <textarea id="ta" placeholder="اكتب لعون أو أرفق مستنداً…"></textarea>
@@ -674,9 +666,11 @@ function showWelcome(){
     +'<div class="wchip" data-fill="احسب مستحقات نهاية الخدمة بالتفصيل بناءً على المرفقات."><span class="ic">🧮</span> احسب مستحقات نهاية الخدمة</div>'
     +'<div class="wchip" data-gen="صحيفة دعوى"><span class="ic">📝</span> اكتب صحيفة دعوى</div>'
     +'<div class="wchip" data-gen="مذكرة جوابية"><span class="ic">📄</span> اكتب مذكرة جوابية</div>'
-    +'<div class="wchip" data-act="style"><span class="ic">✦</span> صِغ النص المحدد بأسلوبي</div></div></div>';
+    +'<div class="wchip" data-act="style"><span class="ic">✦</span> صِغ النص المحدد بأسلوبي</div>'
+    +'<div class="wchip" data-act="letter"><span class="ic">🏛️</span> طبّق الورق الرسمي على المستند</div></div></div>';
   chat.querySelectorAll('.wchip').forEach(function(c){ c.onclick=function(){
     if(c.dataset.act==='style'){ styleSelection(); return; }
+    if(c.dataset.act==='letter'){ applyLetterhead(); return; }
     if(c.dataset.gen){ genDoc=c.dataset.gen; renderChips(); ta.focus(); return; }
     ta.value=c.dataset.fill||''; grow(); ta.focus();
   }; });

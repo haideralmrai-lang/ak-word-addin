@@ -5,13 +5,13 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>d3f2a1b6-7c4e-4a90-b1e2-9f8c7a6b5d40</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.1.0.0</Version>
   <ProviderName>AK Law</ProviderName>
   <DefaultLocale>ar-SA</DefaultLocale>
-  <DisplayName DefaultValue="مساعد AK للصياغة"/>
-  <Description DefaultValue="أدوات الصياغة القانونية والذكاء الصناعي لمكتب عبدالله خالد الراشد للمحاماة"/>
-  <IconUrl DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
-  <HighResolutionIconUrl DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
+  <DisplayName DefaultValue="عون"/>
+  <Description DefaultValue="عون — مساعدك القانوني داخل Word · شركة عبدالله خالد الراشد للمحاماة"/>
+  <IconUrl DefaultValue="https://aklaw-sa.com/wp-content/uploads/aoun/aoun-ain.png"/>
+  <HighResolutionIconUrl DefaultValue="https://aklaw-sa.com/wp-content/uploads/aoun/aoun-ain.png"/>
   <SupportUrl DefaultValue="https://aklaw-sa.com"/>
   <AppDomains>
     <AppDomain>https://haideralmrai-lang.github.io</AppDomain>
@@ -21,7 +21,7 @@
     <Host Name="Document"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=49"/>
+    <SourceLocation DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=50"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -67,23 +67,23 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16" DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
-        <bt:Image id="Icon.32" DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
-        <bt:Image id="Icon.80" DefaultValue="https://aklaw-sa.com/wp-content/uploads/2026/05/Artboard-2.png"/>
+        <bt:Image id="Icon.16" DefaultValue="https://aklaw-sa.com/wp-content/uploads/aoun/aoun-ain.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://aklaw-sa.com/wp-content/uploads/aoun/aoun-ain.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://aklaw-sa.com/wp-content/uploads/aoun/aoun-ain.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://aklaw-sa.com"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=49"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=49"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=50"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://haideralmrai-lang.github.io/ak-word-addin/taskpane.html?v=50"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="مساعد AK للصياغة"/>
-        <bt:String id="AKGroup.Label" DefaultValue="مساعد AK"/>
-        <bt:String id="AKOpenBtn.Label" DefaultValue="أدوات الصياغة"/>
+        <bt:String id="GetStarted.Title" DefaultValue="عون — مساعدك القانوني"/>
+        <bt:String id="AKGroup.Label" DefaultValue="عون"/>
+        <bt:String id="AKOpenBtn.Label" DefaultValue="عون"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="أدوات الصياغة القانونية والذكاء الصناعي لمكتب الراشد."/>
-        <bt:String id="AKOpenBtn.Tooltip" DefaultValue="افتح لوحة أدوات الصياغة القانونية والذكاء."/>
+        <bt:String id="GetStarted.Description" DefaultValue="عون — مساعدك القانوني داخل Word: تحليل وصياغة مستنداتك."/>
+        <bt:String id="AKOpenBtn.Tooltip" DefaultValue="افتح عون — مساعدك القانوني داخل Word."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>

@@ -135,6 +135,8 @@ body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;he
 .genchip{display:inline-flex;align-items:center;gap:6px;background:#fff4e2;border:1px solid #eddcbf;color:#a9752f;border-radius:999px;padding:4px 10px;font-size:.68rem;font-weight:800;margin-bottom:8px}
 .genchip button{background:none;border:none;color:#a9752f;cursor:pointer;font-weight:900}
 .atts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+#genchip:empty,.atts:empty{display:none}
+.inrow{display:flex;align-items:center;gap:6px}
 .att{position:relative;width:58px;height:58px;border-radius:11px;border:1px solid var(--line);overflow:hidden;cursor:pointer;background:#fff;flex:0 0 auto;transition:.14s;display:flex;align-items:center;justify-content:center}
 .att:hover{border-color:var(--green3);transform:translateY(-2px);box-shadow:0 8px 18px rgba(15,23,42,.12)}
 .att img{width:100%;height:100%;object-fit:cover;display:block}
@@ -143,15 +145,14 @@ body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;he
 .att .x{position:absolute;top:3px;inset-inline-start:3px;width:17px;height:17px;border-radius:50%;background:rgba(17,24,39,.7);color:#fff;border:none;font-size:.6rem;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2}
 .att .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.05rem;text-shadow:0 1px 5px rgba(0,0,0,.6);pointer-events:none}
 .att .badge{position:absolute;top:3px;inset-inline-end:3px;background:rgba(18,60,42,.85);color:#fff;font-size:.46rem;font-weight:900;border-radius:5px;padding:2px 4px}
-.box{border:1.6px solid var(--line);border-radius:16px;background:#fff;padding:9px 10px 8px;transition:.14s}
+.box{border:1.6px solid var(--line);border-radius:22px;background:#fff;padding:5px 7px;transition:.14s}
 .box:focus-within{border-color:var(--gold);box-shadow:0 0 0 3px rgba(189,149,82,.12)}
-.box textarea{width:100%;border:none;outline:none;resize:none;background:transparent;font-family:inherit;font-size:.84rem;line-height:1.7;color:var(--ink);min-height:26px;max-height:140px;overflow-y:auto;display:block;padding:2px}
+.box textarea{flex:1;min-width:0;border:none;outline:none;resize:none;background:transparent;font-family:inherit;font-size:.85rem;line-height:1.5;color:var(--ink);height:24px;min-height:24px;max-height:132px;overflow-y:auto;display:block;padding:3px 4px}
 .box textarea::placeholder{color:#9aa6b2}
-.bar{display:flex;align-items:center;gap:6px;margin-top:6px}
-.plus{width:34px;height:34px;border:none;background:#eef7f2;border-radius:50%;color:var(--green2);cursor:pointer;font-size:1.2rem;font-weight:700;display:flex;align-items:center;justify-content:center;transition:.14s}
+.plus{width:32px;height:32px;flex:0 0 auto;border:none;background:#eef7f2;border-radius:50%;color:var(--green2);cursor:pointer;font-size:1.15rem;font-weight:700;display:flex;align-items:center;justify-content:center;transition:.14s}
 .plus:hover{background:#e2f0e9}
-.menuwrap{position:relative}
-.pmenu{position:absolute;bottom:42px;inset-inline-start:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.16);padding:5px;min-width:216px;display:none;z-index:25;max-height:300px;overflow-y:auto}
+.menuwrap{position:relative;flex:0 0 auto}
+.pmenu{position:absolute;bottom:40px;inset-inline-start:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.16);padding:5px;min-width:216px;display:none;z-index:25;max-height:300px;overflow-y:auto}
 .menuwrap.open .pmenu{display:block}
 .pmenu button{display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:.77rem;font-weight:800;color:var(--ink);cursor:pointer;text-align:right}
 .pmenu button:hover{background:#f4f8f6}
@@ -159,12 +160,12 @@ body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;he
 .pmenu .sub{font-size:.63rem;color:var(--muted);font-weight:700;display:block;margin-top:1px}
 .pmenu .divi{height:1px;background:var(--line);margin:4px 6px}
 .pmenu .ttl{font-size:.6rem;font-weight:900;color:var(--muted);padding:5px 11px 2px}
-.bar .send{margin-inline-start:auto;width:42px;height:42px;border:none;border-radius:50%;background:linear-gradient(135deg,var(--green3),var(--green2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(18,60,42,.34);transition:.15s}
-.bar .send:hover{transform:translateY(-1px);filter:brightness(1.05)}
-.bar .send:disabled{opacity:.5;cursor:default;transform:none}
-.bar .send svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.bar .send.stop{background:#fdecea;color:#c0392b}
-.bar .send.stop svg{stroke:#c0392b;fill:#c0392b}
+.send{flex:0 0 auto;width:36px;height:36px;border:none;border-radius:50%;background:linear-gradient(135deg,var(--green3),var(--green2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(18,60,42,.3);transition:.15s}
+.send:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.send:disabled{opacity:.5;cursor:default;transform:none}
+.send svg{width:18px;height:18px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.send.stop{background:#fdecea;color:#c0392b}
+.send.stop svg{stroke:#c0392b;fill:#c0392b}
 .hint{font-size:.57rem;color:var(--muted);text-align:center;margin-top:7px;font-weight:700}
 .foot{text-align:center;padding:4px 0 6px}.foot a{font-size:.68rem;color:var(--muted);text-decoration:none}
 
@@ -274,8 +275,7 @@ body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;he
     <div class="box">
       <div id="genchip"></div>
       <div class="atts" id="atts"></div>
-      <textarea id="ta" placeholder="اكتب لعون أو أرفق مستنداً…"></textarea>
-      <div class="bar">
+      <div class="inrow">
         <div class="menuwrap" id="mw">
           <button class="plus" id="plusBtn" type="button">+</button>
           <div class="pmenu">
@@ -291,6 +291,7 @@ body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;he
             <button data-act="letter"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg><span>طبّق الورق الرسمي<span class="sub">ترويسة وتذييل المكتب</span></span></button>
           </div>
         </div>
+        <textarea id="ta" placeholder="اكتب لعون أو أرفق مستنداً…"></textarea>
         <button class="send" id="send" title="إرسال" type="button"><svg viewBox="0 0 24 24"><path d="M12 20V5"/><path d="M5 12l7-7 7 7"/></svg></button>
       </div>
     </div>

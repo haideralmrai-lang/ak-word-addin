@@ -217,6 +217,12 @@ body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;he
 .lfoot .add{margin-inline-start:auto;background:linear-gradient(135deg,var(--green3),var(--green2));color:#fff;border:none;border-radius:10px;padding:9px 16px;font-family:inherit;font-weight:900;font-size:.8rem;cursor:pointer}
 .lfoot .add:disabled{opacity:.5}
 .lmsg{padding:20px;text-align:center;color:var(--muted);font-weight:800;font-size:.82rem}
+.llist .sec{font-size:.62rem;font-weight:900;color:var(--muted);margin:5px 2px 0}
+.crumbrow{font-size:.7rem;font-weight:800;color:var(--muted);padding:2px 2px 5px;display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+.crumbrow a{color:var(--green2);cursor:pointer;text-decoration:none}
+.crumbrow a:hover{text-decoration:underline}
+.citem.folder .ic{color:var(--gold)}
+.citem .cnt{font-size:.6rem;font-weight:800;color:var(--muted);background:#f3f6f9;border:1px solid var(--line);border-radius:999px;padding:1px 7px;flex:0 0 auto}
 </style>
 </head>
 <body>
@@ -712,7 +718,10 @@ function applyLetterhead(){
 }
 
 /* ===== منتقي مستندات القضايا ===== */
-var caseState={cases:[],view:'cases',caseId:null,caseName:'',atts:[],sel:{}};
+var caseState={cases:[],view:'cases',caseId:null,caseName:'',atts:[],sel:{},folders:[],fById:{},attFolder:{},path:[],cur:0};
+function folderSvg(){ return '<svg class="doc" viewBox="0 0 24 24" style="width:26px;height:26px" fill="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'; }
+function effParent(f){ var pid=+(f.parent_id||0); return (pid && caseState.fById[pid])?pid:0; }
+function folderOfAtt(a){ var fid=caseState.attFolder[a.id]; fid=(fid!=null)?+fid:0; return (fid && caseState.fById[fid])?fid:0; }
 function openCasePicker(){
   $('caseLayer').classList.add('show'); caseState.view='cases'; caseState.sel={};
   $('caseTitle').textContent='مستندات القضايا'; $('caseSub').textContent='اختر قضية لعرض مرفقاتها';
@@ -738,31 +747,75 @@ function renderCases(){
 }
 function openCase(c){
   caseState.view='atts'; caseState.caseId=c.id; caseState.caseName=c.name; caseState.sel={};
+  caseState.folders=[]; caseState.fById={}; caseState.attFolder={}; caseState.path=[]; caseState.cur=0;
   $('caseTitle').textContent='مرفقات القضية'; $('caseSub').textContent=c.name+' — '+(c.partner||'');
   $('caseSearch').value=''; $('caseSearch').placeholder='ابحث باسم الملف…';
   $('caseAdd').disabled=true; $('caseCnt').textContent='٠';
-  $('caseList').innerHTML='<div class="lmsg">جارٍ تحميل المرفقات…</div>';
-  fetch(API+'cases/attachments?quote_id='+encodeURIComponent(c.id),{headers:authH()})
-    .then(function(r){ return r.json(); })
-    .then(function(list){ caseState.atts=Array.isArray(list)?list:[]; renderCaseAtts(''); })
-    .catch(function(){ $('caseList').innerHTML='<div class="lmsg">تعذّر تحميل المرفقات.</div>'; });
+  $('caseList').innerHTML='<div class="lmsg">جارٍ تحميل المرفقات والمجلدات…</div>';
+  Promise.all([
+    fetch(API+'cases/attachments?quote_id='+encodeURIComponent(c.id),{headers:authH()}).then(function(r){return r.json();}).catch(function(){return [];}),
+    fetch(API+'aoun/case_folders?quote_id='+encodeURIComponent(c.id),{headers:authH()}).then(function(r){return r.json();}).catch(function(){return {};})
+  ]).then(function(res){
+    caseState.atts=Array.isArray(res[0])?res[0]:[];
+    var fd=res[1]||{}; caseState.folders=Array.isArray(fd.folders)?fd.folders:[];
+    caseState.attFolder=(fd.attFolder&&typeof fd.attFolder==='object')?fd.attFolder:{};
+    caseState.fById={}; caseState.folders.forEach(function(f){ caseState.fById[+f.id]=f; });
+    renderCaseLevel();
+  }).catch(function(){ $('caseList').innerHTML='<div class="lmsg">تعذّر تحميل المرفقات.</div>'; });
 }
-function renderCaseAtts(q){
-  var list=caseState.atts.filter(function(a){ return !q||(a.name||'').indexOf(q)>=0; });
-  if(!list.length){ $('caseList').innerHTML='<div class="lmsg">لا مرفقات في هذه القضية.</div>'; return; }
-  $('caseList').innerHTML=list.map(function(a){
-    var ext=(a.name.split('.').pop()||'').toLowerCase();
-    var isImg=(a.mimetype||'').indexOf('image/')===0;
-    var ic=isImg?'<span class="ic">'+fileSvg('IMG','#25935f')+'</span>':'<span class="ic">'+fileSvg((ext.toUpperCase()).slice(0,4)||'FILE',COL[ext]||'#64748b')+'</span>';
-    var kb=a.file_size?Math.max(1,Math.round(a.file_size/1024))+' ك.ب':'';
-    return '<div class="citem'+(caseState.sel[a.id]?' sel':'')+'" data-id="'+a.id+'">'+ic
-      +'<span class="m"><b>'+esc(a.name)+'</b><span>'+kb+(a.create_date?' · '+a.create_date:'')+'</span></span>'
-      +'<span class="ck">'+(caseState.sel[a.id]?'✓':'')+'</span></div>';
-  }).join('');
-  $('caseList').querySelectorAll('.citem').forEach(function(d){ d.onclick=function(){
+function fileItemHtml(a,folderName){
+  var ext=(String(a.name||'').split('.').pop()||'').toLowerCase();
+  var isImg=(a.mimetype||'').indexOf('image/')===0;
+  var ic=isImg?'<span class="ic">'+fileSvg('IMG','#25935f')+'</span>':'<span class="ic">'+fileSvg((ext.toUpperCase()).slice(0,4)||'FILE',COL[ext]||'#64748b')+'</span>';
+  var kb=a.file_size?Math.max(1,Math.round(a.file_size/1024))+' ك.ب':'';
+  var meta=kb+(folderName?(kb?' · ':'')+'📁 '+esc(folderName):'')+(a.create_date?' · '+a.create_date:'');
+  return '<div class="citem'+(caseState.sel[a.id]?' sel':'')+'" data-id="'+a.id+'">'+ic
+    +'<span class="m"><b>'+esc(a.name)+'</b><span>'+meta+'</span></span>'
+    +'<span class="ck">'+(caseState.sel[a.id]?'✓':'')+'</span></div>';
+}
+function wireFileClicks(){
+  $('caseList').querySelectorAll('.citem[data-id]').forEach(function(d){ d.onclick=function(){
     var id=this.dataset.id; if(caseState.sel[id]) delete caseState.sel[id]; else caseState.sel[id]=caseState.atts.filter(function(x){return String(x.id)===String(id);})[0];
-    renderCaseAtts($('caseSearch').value.trim()); updateCaseCnt();
+    var q=$('caseSearch').value.trim(); if(q) renderCaseSearch(q); else renderCaseLevel(); updateCaseCnt();
   }; });
+}
+function folderCount(fid){
+  var subs=caseState.folders.filter(function(f){return effParent(f)===fid;}).length;
+  var files=caseState.atts.filter(function(a){return folderOfAtt(a)===fid;}).length;
+  return subs+files;
+}
+function renderCaseLevel(){
+  var cur=caseState.cur;
+  var subs=caseState.folders.filter(function(f){return effParent(f)===cur;});
+  var files=caseState.atts.filter(function(a){return folderOfAtt(a)===cur;});
+  /* المسار */
+  var crumb='<a data-c="0">📁 الجذر</a>';
+  caseState.path.forEach(function(p,i){ crumb+=' › <a data-c="'+p.id+'">'+esc(p.name)+'</a>'; });
+  var html=(cur!==0||caseState.path.length)?'<div class="crumbrow">'+crumb+'</div>':'';
+  if(!subs.length&&!files.length){ html+='<div class="lmsg">هذا المجلد فارغ.</div>'; }
+  if(subs.length){ html+='<div class="sec">المجلدات</div>'+subs.map(function(f){
+    return '<div class="citem folder" data-f="'+f.id+'" data-fn="'+esc(f.name)+'"><span class="ic">'+folderSvg()+'</span><span class="m"><b>'+esc(f.name)+'</b><span>'+folderCount(+f.id)+' عنصر</span></span><span class="cnt">'+folderCount(+f.id)+'</span></div>';
+  }).join(''); }
+  if(files.length){ html+='<div class="sec">الملفات</div>'+files.map(function(a){ return fileItemHtml(a,''); }).join(''); }
+  $('caseList').innerHTML=html;
+  $('caseList').querySelectorAll('.crumbrow a').forEach(function(a){ a.onclick=function(){
+    var id=+this.dataset.c; if(id===0){ caseState.path=[]; caseState.cur=0; }
+    else { var idx=caseState.path.map(function(p){return p.id;}).indexOf(id); if(idx>=0) caseState.path=caseState.path.slice(0,idx+1); caseState.cur=id; }
+    renderCaseLevel();
+  }; });
+  $('caseList').querySelectorAll('.citem.folder').forEach(function(d){ d.onclick=function(){
+    caseState.path.push({id:+this.dataset.f,name:this.dataset.fn}); caseState.cur=+this.dataset.f; renderCaseLevel();
+  }; });
+  wireFileClicks();
+}
+function renderCaseSearch(q){
+  var list=caseState.atts.filter(function(a){ return (a.name||'').indexOf(q)>=0; });
+  if(!list.length){ $('caseList').innerHTML='<div class="lmsg">لا ملفات مطابقة.</div>'; return; }
+  $('caseList').innerHTML='<div class="sec">نتائج البحث ('+list.length+')</div>'+list.map(function(a){
+    var fid=folderOfAtt(a); var fn=(fid&&caseState.fById[fid])?caseState.fById[fid].name:'';
+    return fileItemHtml(a,fn);
+  }).join('');
+  wireFileClicks();
 }
 function updateCaseCnt(){ var n=Object.keys(caseState.sel).length; $('caseCnt').textContent=n?String(n):'٠'; $('caseAdd').disabled=!n; }
 function addCaseSelection(){
@@ -847,10 +900,16 @@ Office.onReady(function(){
   $('prev').onclick=function(e){ if(e.target===this) $('pvClose').click(); };
 
   /* منتقي القضايا */
-  $('caseBack').onclick=function(){ if(caseState.view==='atts'){ openCasePicker(); } else { $('caseLayer').classList.remove('show'); } };
+  $('caseBack').onclick=function(){
+    if(caseState.view==='atts'){
+      if($('caseSearch').value.trim()){ $('caseSearch').value=''; renderCaseLevel(); return; }
+      if(caseState.path.length){ caseState.path.pop(); caseState.cur=caseState.path.length?caseState.path[caseState.path.length-1].id:0; renderCaseLevel(); return; }
+      openCasePicker();
+    } else { $('caseLayer').classList.remove('show'); }
+  };
   $('caseAdd').onclick=addCaseSelection;
   var cst=null;
-  $('caseSearch').addEventListener('input',function(){ clearTimeout(cst); var q=this.value.trim(); cst=setTimeout(function(){ if(caseState.view==='cases') loadCases(q); else renderCaseAtts(q); },300); });
+  $('caseSearch').addEventListener('input',function(){ clearTimeout(cst); var q=this.value.trim(); cst=setTimeout(function(){ if(caseState.view==='cases') loadCases(q); else if(q) renderCaseSearch(q); else renderCaseLevel(); },300); });
 });
 </script>
 </body>

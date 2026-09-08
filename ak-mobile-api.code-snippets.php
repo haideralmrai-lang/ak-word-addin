@@ -16,6 +16,11 @@ function ak_mobile_can() {
     return current_user_can( 'manage_options' );
 }
 
+/* صلاحية مساعد الصياغة والرفع: أي عضو مسجّل في المنصة (وليس الأدمن فقط) */
+function ak_assistant_can() {
+    return is_user_logged_in();
+}
+
 /* سماحية CORS لمسارات ak/v1 (لتعمل إضافة Word المستضافة على نطاق آخر) */
 add_action( 'rest_api_init', function () {
     add_filter( 'rest_pre_serve_request', function ( $served, $result, $request ) {
@@ -70,6 +75,182 @@ function ak_recv_tag_label( $tag ) {
 }
 }
 
+/* ===== موجِّه ذكي: يصنّف سؤال المستخدم عن الأحكام ويستخرج المرشّحات (سنة/محكمة/رقم) عبر Gemini Flash ===== */
+if ( ! function_exists( 'ak_query_intent' ) ) {
+function ak_query_intent( $q, $ctx = '' ) {
+    $default = [ 'intent' => 'semantic', 'newest' => true, 'year' => 0, 'court' => '', 'want_full' => false ];
+    $key = get_option( 'ak_gemini_api_key', '' );
+    if ( ! $key || trim( (string) $q ) === '' ) return $default;
+    $prompt = "أنت مصنِّف نوايا. صنّف سؤال المحامي التالي عن مكتبة أحكام قضائية، وأعد JSON فقط بلا أي شرح.\n"
+        . 'السؤال: «' . mb_substr( (string) $q, 0, 500 ) . "»\n"
+        . ( $ctx !== '' ? 'سياق (آخر رد للمساعد): «' . mb_substr( (string) $ctx, 0, 300 ) . "»\n" : '' )
+        . "الحقول المطلوبة:\n"
+        . "- intent: واحدة فقط من: count | recent | filter | by_number | semantic | other\n"
+        . "   count = يسأل عن عدد/كم الأحكام أو الصكوك.\n"
+        . "   recent = يسأل عن الأحدث/الأقدم/آخر/أول حكم (ترتيب زمني).\n"
+        . "   filter = يريد أحكام سنة معيّنة أو محكمة معيّنة.\n"
+        . "   by_number = يشير إلى قضية برقمها، أو يطلب نصّ حكم بعينه أو إكماله («اكتبه كامل»، «أكمل»).\n"
+        . "   semantic = يبحث عن أحكام حول موضوع/واقعة/مبدأ.\n"
+        . "   other = ليس عن الأحكام (نظام، لائحة، مادة، صياغة، سؤال عام).\n"
+        . "- newest: true إن أراد الأحدث، false إن أراد الأقدم (للـ recent).\n"
+        . "- year: السنة الهجرية كرقم صحيح، أو 0 إن لم تُذكر.\n"
+        . "- court: نوع المحكمة إن ذُكر (تجارية/عامة/عمالية/جزائية/أحوال/إدارية/عليا/استئناف)، وإلا نص فارغ.\n"
+        . "- want_full: true إن طلب النص الكامل للحكم أو إكماله.\n"
+        . 'مثال: {"intent":"recent","newest":true,"year":0,"court":"","want_full":true}';
+    $body = wp_json_encode( [ 'contents' => [ [ 'parts' => [ [ 'text' => $prompt ] ] ] ], 'generationConfig' => [ 'temperature' => 0, 'maxOutputTokens' => 160, 'responseMimeType' => 'application/json', 'thinkingConfig' => [ 'thinkingBudget' => 0 ] ] ] );
+    $resp = wp_remote_post( 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . rawurlencode( $key ), [ 'headers' => [ 'Content-Type' => 'application/json' ], 'body' => $body, 'timeout' => 12 ] );
+    if ( is_wp_error( $resp ) ) return $default;
+    $d   = json_decode( wp_remote_retrieve_body( $resp ), true );
+    $txt = $d['candidates'][0]['content']['parts'][0]['text'] ?? '';
+    if ( ! preg_match( '/\{.*\}/s', (string) $txt, $mm ) ) return $default;
+    $o = json_decode( $mm[0], true );
+    if ( ! is_array( $o ) ) return $default;
+    return [
+        'intent'    => in_array( $o['intent'] ?? '', [ 'count', 'recent', 'filter', 'by_number', 'semantic', 'other' ], true ) ? $o['intent'] : 'semantic',
+        'newest'    => ! isset( $o['newest'] ) || $o['newest'] !== false,
+        'year'      => (int) ( $o['year'] ?? 0 ),
+        'court'     => (string) ( $o['court'] ?? '' ),
+        'want_full' => ! empty( $o['want_full'] ),
+    ];
+}
+}
+
+/* ===== أدوات المساعد الوكيل (Agentic) — يناديها النموذج بنفسه ليتقصّى المكتبة ويتحقّق ===== */
+
+/* استخراج مادة نظامية بعينها من أي نظام في المكتبة بالاسم + الرقم */
+if ( ! function_exists( 'ak_law_article' ) ) {
+function ak_law_article( $lawName, $num ) {
+    global $wpdb; $t = $wpdb->prefix . 'ak_laws';
+    if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) !== $t ) return [ 'found' => false, 'error' => 'no_table' ];
+    $lawName = trim( (string) $lawName ); $num = trim( (string) preg_replace( '/[^0-9٠-٩]/u', '', (string) $num ) );
+    $num = strtr( $num, [ '٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9' ] );
+    $like = '%' . $wpdb->esc_like( $lawName ) . '%';
+    $row  = $wpdb->get_row( $wpdb->prepare( "SELECT name, body, cat FROM $t WHERE name LIKE %s ORDER BY CHAR_LENGTH(name) ASC LIMIT 1", $like ), ARRAY_A );
+    if ( ! $row ) return [ 'found' => false, 'note' => 'لا يوجد نظام بهذا الاسم في المكتبة' ];
+    $body = (string) $row['body'];
+    if ( $num === '' ) return [ 'found' => true, 'law' => $row['name'], 'text' => mb_substr( $body, 0, 5000 ) ];
+    $needle = 'المادة (' . $num . ')';
+    $start  = mb_strpos( $body, $needle );
+    if ( $start === false ) return [ 'found' => false, 'law' => $row['name'], 'article' => $num, 'note' => 'النظام موجود لكن لم يُعثر على نص هذه المادة برقمها ضمنه' ];
+    /* نهاية المادة = أول «المادة (رقم مختلف)» بعدها؛ نتجاوز أي تكرار لنفس الرقم (إشارات التعديل) */
+    $search = $start + mb_strlen( $needle );
+    $end    = mb_strlen( $body );
+    while ( true ) {
+        $p = mb_strpos( $body, 'المادة (', $search );
+        if ( $p === false ) break;
+        $seg = mb_substr( $body, $p, 24 );
+        if ( preg_match( '/^المادة \((\d+)\)/u', $seg, $m2 ) && $m2[1] !== $num ) { $end = $p; break; }
+        $search = $p + 8; /* نفس الرقم أو صيغة أخرى → تابع */
+    }
+    return [ 'found' => true, 'law' => $row['name'], 'article' => $num, 'text' => trim( mb_substr( $body, $start, min( $end - $start, 2500 ) ) ) ];
+}
+}
+
+/* إحصاءات المكتبة (أعداد حقيقية) */
+if ( ! function_exists( 'ak_lib_stats' ) ) {
+function ak_lib_stats() {
+    global $wpdb;
+    $out = [ 'judgments' => function_exists( 'ak_judg_count' ) ? ak_judg_count() : 0 ];
+    $lawsT = $wpdb->prefix . 'ak_laws';
+    if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $lawsT ) ) === $lawsT ) {
+        $cats = $wpdb->get_results( "SELECT cat, COUNT(*) n FROM $lawsT GROUP BY cat ORDER BY n DESC", ARRAY_A );
+        $tot = 0; $c = [];
+        foreach ( (array) $cats as $r ) { $tot += (int) $r['n']; $c[ $r['cat'] ] = (int) $r['n']; }
+        $out['laws_total'] = $tot; $out['laws_by_category'] = $c;
+    }
+    $qbooks = get_option( 'ak_qadha_books' );
+    if ( is_array( $qbooks ) ) {
+        $nJournal = 0; $nLawEd = 0; $nBook = 0;
+        foreach ( $qbooks as $bk ) {
+            $tt = trim( (string) ( $bk['title'] ?? '' ) );
+            if ( $tt === '' || mb_strpos( $tt, 'نظام رسمي' ) === 0 ) continue;
+            if ( mb_strpos( $tt, 'مجلة قضاء' ) !== false ) $nJournal++;
+            elseif ( mb_strpos( $tt, 'نظام' ) === 0 || preg_match( '/لائحت|لوائح|التنفيذية/u', $tt ) ) $nLawEd++;
+            else $nBook++;
+        }
+        $out['references'] = [ 'books_research' => $nBook, 'qadha_journal_issues' => $nJournal, 'published_law_editions' => $nLawEd, 'total' => $nBook + $nJournal + $nLawEd ];
+    }
+    return $out;
+}
+}
+
+/* تعريفات الأدوات بصيغة Gemini functionDeclarations */
+if ( ! function_exists( 'ak_tool_defs' ) ) {
+function ak_tool_defs() {
+    $S = [ 'type' => 'string' ]; $I = [ 'type' => 'integer' ]; $B = [ 'type' => 'boolean' ];
+    return [
+        [ 'name' => 'library_stats', 'description' => 'إحصاءات المكتبة الحقيقية: عدد الأحكام القضائية، وعدد الأنظمة واللوائح وفئاتها، وعدد الكتب والأبحاث وأعداد مجلة قضاء. استعملها لأي سؤال عن «كم».', 'parameters' => [ 'type' => 'object', 'properties' => new stdClass() ] ],
+        [ 'name' => 'search_judgments', 'description' => 'بحث دلالي في الأحكام القضائية حسب الموضوع/الواقعة. يرجّع قائمة مختصرة (رقم القضية، المحكمة، السنة، مقتطف المنطوق) مع معرّف id لكل حكم.', 'parameters' => [ 'type' => 'object', 'properties' => [ 'query' => $S, 'count' => $I ], 'required' => [ 'query' ] ] ],
+        [ 'name' => 'get_judgment', 'description' => 'يجلب النص الكامل لحكم بعينه — إمّا برقم القضية number أو بالمعرّف id (من نتائج البحث). استعمله حين يُطلب نصّ حكم كاملاً أو تفاصيله.', 'parameters' => [ 'type' => 'object', 'properties' => [ 'number' => $S, 'id' => $S ] ] ],
+        [ 'name' => 'recent_judgments', 'description' => 'أحدث أو أقدم الأحكام حسب السنة الهجرية (مُتحقَّق من صحّة السنة بالنص). newest=true للأحدث، false للأقدم.', 'parameters' => [ 'type' => 'object', 'properties' => [ 'newest' => $B, 'count' => $I ] ] ],
+        [ 'name' => 'filter_judgments', 'description' => 'تصفية الأحكام بسنة هجرية و/أو نوع محكمة (تجارية/عامة/عمالية/جزائية/أحوال/إدارية/عليا/استئناف). يرجّع العدد المطابق وعيّنة.', 'parameters' => [ 'type' => 'object', 'properties' => [ 'year' => $I, 'court' => $S, 'count' => $I ] ] ],
+        [ 'name' => 'get_law_article', 'description' => 'يجلب النص الحرفي لمادة نظامية بعينها من أي نظام سعودي في المكتبة (بالاسم + رقم المادة). استعمله دائماً قبل الاستشهاد برقم مادة.', 'parameters' => [ 'type' => 'object', 'properties' => [ 'law_name' => $S, 'article_number' => $S ], 'required' => [ 'law_name' ] ] ],
+        [ 'name' => 'search_laws', 'description' => 'بحث في نصوص الأنظمة واللوائح السعودية حسب الموضوع؛ يرجّع مقاطع نظامية ذات صلة.', 'parameters' => [ 'type' => 'object', 'properties' => [ 'query' => $S ], 'required' => [ 'query' ] ] ],
+        [ 'name' => 'search_books', 'description' => 'بحث في الكتب والأبحاث القضائية (المكتبة الفقهية) حسب الموضوع؛ يرجّع مقاطع من الكتب مع مصادرها.', 'parameters' => [ 'type' => 'object', 'properties' => [ 'query' => $S ], 'required' => [ 'query' ] ] ],
+    ];
+}
+}
+
+/* منفّذ أداة واحدة — يرجّع نتيجة موجزة (JSON) */
+if ( ! function_exists( 'ak_run_tool' ) ) {
+function ak_run_tool( $name, $args ) {
+    $args = is_array( $args ) ? $args : [];
+    $judgBrief = function ( $j ) {
+        return [
+            'id'    => $j['id'] ?? '',
+            'court' => $j['court'] ?? '', 'city' => $j['city'] ?? '', 'year' => $j['year'] ?? '', 'number' => $j['num'] ?? '',
+            'ruling_excerpt' => function_exists( 'ak_judg_ruling' ) ? ak_judg_ruling( (string) ( $j['text'] ?? $j['full'] ?? $j['body'] ?? '' ), 700 ) : mb_substr( (string) ( $j['text'] ?? '' ), 0, 700 ),
+        ];
+    };
+    switch ( $name ) {
+        case 'library_stats':
+            return ak_lib_stats();
+        case 'search_judgments':
+            if ( ! function_exists( 'ak_judg_search' ) ) return [ 'error' => 'unavailable' ];
+            $n = max( 1, min( 8, (int) ( $args['count'] ?? 5 ) ) );
+            $r = ak_judg_search( (string) ( $args['query'] ?? '' ), $n );
+            return [ 'results' => array_map( function ( $x ) {
+                return [ 'id' => $x['id'] ?? '', 'court' => $x['court'] ?? '', 'city' => $x['city'] ?? '', 'year' => $x['year'] ?? '', 'number' => $x['num'] ?? '', 'ruling_excerpt' => mb_substr( (string) ( $x['body'] ?? '' ), 0, 700 ), 'score' => $x['score'] ?? 0 ];
+            }, (array) ( $r['results'] ?? [] ) ) ];
+        case 'get_judgment':
+            $j = null;
+            if ( ! empty( $args['id'] ) && function_exists( 'ak_judg_read' ) ) { $j = ak_judg_read( (string) $args['id'] ); if ( $j ) $j['id'] = (string) $args['id']; }
+            if ( ! $j && ! empty( $args['number'] ) && function_exists( 'ak_judg_by_nums' ) ) { $arr = ak_judg_by_nums( [ (string) $args['number'] ], 1 ); $j = $arr[0] ?? null; }
+            if ( ! $j ) return [ 'found' => false, 'note' => 'لم يُعثر على الحكم بهذا الرقم/المعرّف' ];
+            return [ 'found' => true, 'court' => $j['court'] ?? '', 'city' => $j['city'] ?? '', 'year' => $j['year'] ?? '', 'number' => $j['num'] ?? '', 'full_text' => mb_substr( (string) ( $j['text'] ?? '' ), 0, 60000 ) ];
+        case 'recent_judgments':
+            if ( ! function_exists( 'ak_judg_by_recency' ) ) return [ 'error' => 'unavailable' ];
+            $newest = ! isset( $args['newest'] ) || $args['newest'] !== false;
+            $n = max( 1, min( 5, (int) ( $args['count'] ?? 3 ) ) );
+            return [ 'newest' => $newest, 'results' => array_map( $judgBrief, ak_judg_by_recency( $newest, $n ) ) ];
+        case 'filter_judgments':
+            if ( ! function_exists( 'ak_judg_filter' ) ) return [ 'error' => 'unavailable' ];
+            $n = max( 1, min( 8, (int) ( $args['count'] ?? 5 ) ) );
+            $fr = ak_judg_filter( (int) ( $args['year'] ?? 0 ), (string) ( $args['court'] ?? '' ), $n );
+            return [ 'matching_total' => $fr['total'] ?? 0, 'results' => array_map( $judgBrief, (array) ( $fr['items'] ?? [] ) ) ];
+        case 'get_law_article':
+            if ( ! function_exists( 'ak_law_article' ) ) return [ 'error' => 'unavailable' ];
+            return ak_law_article( (string) ( $args['law_name'] ?? '' ), (string) ( $args['article_number'] ?? '' ) );
+        case 'search_laws':
+            $q = (string) ( $args['query'] ?? '' );
+            if ( function_exists( 'ak_detect_domains' ) && function_exists( 'ak_law_relevant' ) ) {
+                $doms = ak_detect_domains( $q ); $txt = '';
+                foreach ( $doms as $dom ) { $c = ak_law_relevant( $dom, $q, 3000 ); if ( $c !== '' ) $txt .= "\n\n【 " . ( ak_law_sources()[ $dom ]['name'] ?? '' ) . " 】\n" . $c; }
+                if ( $txt === '' && function_exists( 'ak_qadha_candidates' ) ) { foreach ( ak_qadha_candidates( $q, 8, 10 ) as $c ) if ( ( $c['type'] ?? '' ) === 'نظام' ) $txt .= "\n\n【 " . $c['title'] . " 】\n" . mb_substr( $c['body'], 0, 1200 ); }
+                return [ 'passages' => mb_substr( trim( $txt ), 0, 6000 ) ];
+            }
+            return [ 'passages' => '' ];
+        case 'search_books':
+            if ( ! function_exists( 'ak_qadha_candidates' ) ) return [ 'passages' => '' ];
+            $q = (string) ( $args['query'] ?? '' ); $txt = '';
+            foreach ( ak_qadha_candidates( $q, 10, 14 ) as $c ) if ( ( $c['type'] ?? '' ) !== 'نظام' ) $txt .= "\n\n【 من: " . $c['title'] . " 】\n" . mb_substr( $c['body'], 0, 1200 );
+            return [ 'passages' => mb_substr( trim( $txt ), 0, 6000 ) ];
+        default:
+            return [ 'error' => 'unknown_tool: ' . $name ];
+    }
+}
+}
+
 /* ===== مرجعية الأنظمة السعودية: جلب رسمي من هيئة الخبراء + استرجاع المواد ذات الصلة ===== */
 if ( ! function_exists( 'ak_build_sys' ) ) {
 function ak_build_sys( $messages, $doc_type ) {
@@ -81,12 +262,26 @@ function ak_build_sys( $messages, $doc_type ) {
     $caseText = '';
     foreach ( $messages as $cm ) { if ( ( $cm['role'] ?? 'user' ) !== 'model' ) $caseText .= ' ' . (string) ( $cm['text'] ?? '' ); }
     $caseText .= ' ' . $doc_type;
+
+    /* آخر رسالة للمستخدم وآخر رد للمساعد — لتركيز الاسترجاع على السؤال الحالي في المحادثات الطويلة */
+    $lastUser = ''; $lastModel = '';
+    for ( $i = count( $messages ) - 1; $i >= 0; $i-- ) {
+        $role = $messages[ $i ]['role'] ?? 'user';
+        if ( $lastUser === '' && $role !== 'model' ) $lastUser = (string) ( $messages[ $i ]['text'] ?? '' );
+        if ( $lastModel === '' && $role === 'model' ) $lastModel = (string) ( $messages[ $i ]['text'] ?? '' );
+        if ( $lastUser !== '' && $lastModel !== '' ) break;
+    }
+    /* استعلام مركّز: السؤال الحالي (مضاعَف الوزن) — كي لا تتشتّت المطابقة بأسئلة سابقة عن مواضيع أخرى */
+    $focusQuery = trim( $lastUser . ' ' . $lastUser . ' ' . $doc_type );
+    if ( mb_strlen( trim( $lastUser ) ) < 6 ) $focusQuery = $caseText; /* رسالة قصيرة جداً → استعن بالسياق */
+
     $lawCtx = '';
     if ( function_exists( 'ak_detect_domains' ) ) {
-        $domains = ak_detect_domains( $caseText );
+        $domains = ak_detect_domains( $lastUser );
+        if ( ! $domains ) $domains = ak_detect_domains( $caseText ); /* متابعة بلا اسم نظام صريح → استعن بالسياق */
         $per = count( $domains ) ? max( 2500, (int) ( 11000 / count( $domains ) ) ) : 0;
         foreach ( $domains as $dom ) {
-            $ctx = ak_law_relevant( $dom, $caseText, $per );
+            $ctx = ak_law_relevant( $dom, $focusQuery, $per );
             if ( $ctx !== '' ) { $nm = ak_law_sources()[ $dom ]['name'] ?? ''; $lawCtx .= "\n\n【 " . $nm . " 】\n" . $ctx; }
         }
         $lawCtx = mb_substr( trim( $lawCtx ), 0, 12000 );
@@ -96,13 +291,143 @@ function ak_build_sys( $messages, $doc_type ) {
     $docKey = function_exists( 'ak_detect_doctype' ) ? ak_detect_doctype( $caseText ) : '';
     $libEx  = ( $docKey && function_exists( 'ak_lib_examples' ) ) ? ak_lib_examples( $docKey ) : '';
 
-    /* مراجع من المكتبة القضائية (بحث دلالي) */
-    $qadhaCtx = function_exists( 'ak_qadha_retrieve' ) ? ak_qadha_retrieve( $caseText ) : '';
+    /* مراجع المكتبة: مرشّحات واسعة (أنظمة + كتب) ثم إعادة ترتيب ذكية تفضّل الأنظمة */
+    $qadhaCtx = ''; $semLawCtx = '';
+    if ( function_exists( 'ak_qadha_candidates' ) ) {
+        $cands  = ak_qadha_candidates( $focusQuery, 14, 28 );
+        $ranked = ( $cands && function_exists( 'ak_rerank' ) ) ? ak_rerank( $lastUser ?: $caseText, $cands, 8 ) : array_slice( (array) $cands, 0, 6 );
+        $bk = []; $lw = [];
+        foreach ( $ranked as $c ) {
+            $block = '【 ' . ( $c['type'] === 'نظام' ? 'نظام: ' : 'من: ' ) . $c['title'] . " 】\n" . mb_substr( $c['body'], 0, 1400 );
+            if ( $c['type'] === 'نظام' ) $lw[] = $block; else $bk[] = $block;
+        }
+        $qadhaCtx  = mb_substr( implode( "\n\n", $bk ), 0, 6000 );
+        $semLawCtx = mb_substr( implode( "\n\n", $lw ), 0, 6000 );
+    } elseif ( function_exists( 'ak_qadha_retrieve' ) ) {
+        $qadhaCtx = ak_qadha_retrieve( $caseText );
+    }
+    /* ادمج النصوص النظامية المسترجعة دلالياً مع النصوص الأساسية (٦ أنظمة بالكلمات) */
+    if ( $semLawCtx !== '' ) $lawCtx = trim( $lawCtx . ( $lawCtx !== '' ? "\n\n" : '' ) . $semLawCtx );
+    $lawCtx = mb_substr( $lawCtx, 0, 14000 );
+
+    /* سوابق قضائية من أحكام وزارة العدل — عبر الموجِّه الذكي (يفهم نوع السؤال ويوجّهه للأداة الصحيحة) */
+    $judgCtx = ''; $parts = []; $judgSeen = []; $judgFacts = '';
+    $intent = function_exists( 'ak_query_intent' ) ? ak_query_intent( $lastUser, $lastModel )
+            : [ 'intent' => 'semantic', 'newest' => true, 'year' => 0, 'court' => '', 'want_full' => false ];
+    $fullCap = ! empty( $intent['want_full'] ) ? 100000 : 2600;
+    /* مضيف موحّد مع إزالة التكرار */
+    $addJudg = function ( $j, $note = '' ) use ( &$parts, &$judgSeen, $fullCap ) {
+        $id = (string) ( $j['id'] ?? '' );
+        if ( $id !== '' ) { if ( isset( $judgSeen[ $id ] ) ) return; $judgSeen[ $id ] = 1; }
+        $hd = trim( ( $j['court'] ?? '' ) . ' — ' . ( $j['city'] ?? '' ) . ' — ' . ( $j['year'] ?? '' ) . 'هـ — القضية ' . ( $j['num'] ?? '' ) );
+        $jt = (string) ( $j['text'] ?? $j['full'] ?? $j['body'] ?? '' );
+        $parts[] = '【 ' . $hd . ( $note !== '' ? ' (' . $note . ')' : '' ) . ' 】' . "\n" . mb_substr( $jt, 0, $fullCap );
+    };
+    $fullNote = 'نصّ الحكم كاملاً غير منقوص كما ورد في المكتبة — انسخه حرفياً من أوله إلى آخره (بما فيه المنطوق وأسماء القضاة) إن طُلب، ولا تدّعِ أنه ناقص';
+
+    switch ( $intent['intent'] ) {
+        case 'by_number': /* قضية بعينها برقمها أو طلب نصّها/إكمالها */
+            if ( function_exists( 'ak_judg_by_nums' ) && preg_match_all( '/(?:القضية|قضية|رقم)\s*[:\-]?\s*([0-9\x{0660}-\x{0669}]+(?:\/[0-9\x{0660}-\x{0669}]+)*\s*ق?)/u', $lastUser . ' ' . $lastModel, $mm ) ) {
+                foreach ( ak_judg_by_nums( $mm[1], 2 ) as $j ) $addJudg( $j, $fullNote );
+            }
+            break;
+        case 'recent': /* الأحدث/الأقدم بالتاريخ */
+            if ( function_exists( 'ak_judg_by_recency' ) ) {
+                foreach ( ak_judg_by_recency( ! empty( $intent['newest'] ), ! empty( $intent['want_full'] ) ? 1 : 3 ) as $j )
+                    $addJudg( $j, ( ! empty( $intent['newest'] ) ? 'من أحدث الأحكام' : 'من أقدم الأحكام' ) . ' حسب السنة الهجرية' . ( ! empty( $intent['want_full'] ) ? ' — ' . $fullNote : '' ) );
+                $judgFacts = 'ترتيب الأحكام زمنياً يعتمد السنة الهجرية المسجّلة؛ الأحكام المرفقة هي فعلاً ' . ( ! empty( $intent['newest'] ) ? 'الأحدث' : 'الأقدم' ) . ' في المكتبة.';
+            }
+            break;
+        case 'filter': /* سنة و/أو محكمة محددة */
+            if ( function_exists( 'ak_judg_filter' ) ) {
+                $fr = ak_judg_filter( (int) $intent['year'], (string) $intent['court'], ! empty( $intent['want_full'] ) ? 2 : 5 );
+                foreach ( ( $fr['items'] ?? [] ) as $j ) $addJudg( $j );
+                if ( ! empty( $fr['total'] ) ) $judgFacts = 'عدد الأحكام المطابقة' . ( $intent['year'] ? ' لسنة ' . (int) $intent['year'] . 'هـ' : '' ) . ( $intent['court'] !== '' ? ' لمحكمة ' . $intent['court'] : '' ) . ': ' . number_format( (int) $fr['total'] ) . ' حكماً.';
+            }
+            break;
+        case 'count':  /* العدّ يجيب من فهرس المكتبة أدناه — لا نحقن أحكاماً */
+        case 'other':  /* ليس عن الأحكام — لا حقن (يبقى التوجيه خفيفاً ومركّزاً) */
+            break;
+        case 'semantic':
+        default: /* بحث موضوعي */
+            if ( function_exists( 'ak_judg_search' ) ) {
+                $jq = trim( ( mb_strlen( trim( $lastUser ) ) >= 6 ? $lastUser : $caseText ) . ' ' . mb_substr( $lastModel, 0, 400 ) );
+                foreach ( ( ak_judg_search( $jq, 6 )['results'] ?? [] ) as $r ) { if ( count( $parts ) >= 6 ) break; $addJudg( $r ); }
+            }
+            break;
+    }
+    /* تعزيز خفيف: إن لم يجلب الموجِّه شيئاً لسؤالٍ متعلّق بالأحكام، أضِف عيّنة دلالية */
+    if ( ! $parts && function_exists( 'ak_judg_search' ) && in_array( $intent['intent'], [ 'recent', 'filter', 'by_number' ], true ) ) {
+        $jq = trim( ( mb_strlen( trim( $lastUser ) ) >= 6 ? $lastUser : $caseText ) . ' ' . mb_substr( $lastModel, 0, 400 ) );
+        foreach ( ( ak_judg_search( $jq, 3 )['results'] ?? [] ) as $r ) { if ( count( $parts ) >= 3 ) break; $addJudg( $r ); }
+    }
+    if ( $parts ) $judgCtx = ( $judgFacts !== '' ? $judgFacts . "\n\n" : '' ) . implode( "\n\n", $parts );
+    elseif ( $judgFacts !== '' ) $judgCtx = $judgFacts;
+
+    /* فهرس المكتبة الفعلي — حتى لا يدّعي المساعد وجود مراجع ليست فيها.
+       ترتيب مقصود: الأعداد الإجمالية (أحكام + أنظمة) أولاً ومحميّة من القصّ، ثم قائمة الكتب الطويلة تملأ ما تبقّى. */
+    global $wpdb;
+    /* عدد الأحكام من الفهرس الملفّي (يُحسب هنا مباشرةً حتى لا يعتمد على سنيبت آخر) */
+    $jc = 0;
+    $judgBase = wp_upload_dir()['basedir'] . '/ak-judg';
+    $mfp = $judgBase . '/meta.json';
+    $cc  = get_option( 'ak_judg_count_cache' );
+    if ( is_array( $cc ) && (int) ( $cc['mt'] ?? 0 ) === (int) @filemtime( $mfp ) && (int) ( $cc['n'] ?? 0 ) > 0 ) {
+        $jc = (int) $cc['n']; /* لا نثق بعدد مخزَّن صفراً */
+    } elseif ( is_readable( $mfp ) ) {
+        $md = json_decode( file_get_contents( $mfp ), true );
+        $jc = is_array( $md ) ? count( $md ) : 0;
+        if ( $jc > 0 ) update_option( 'ak_judg_count_cache', [ 'mt' => (int) @filemtime( $mfp ), 'n' => $jc ], false );
+    }
+    if ( ! $jc && is_dir( "$judgBase/texts" ) ) { /* احتياط: عدّ من ملفات الشِظف */
+        foreach ( glob( "$judgBase/texts/*.json" ) as $tf ) { $o = json_decode( (string) file_get_contents( $tf ), true ); if ( is_array( $o ) ) $jc += count( $o ); }
+    }
+    if ( ! $jc && function_exists( 'ak_judg_count' ) ) $jc = ak_judg_count();
+    if ( ! $jc ) { /* توافق مع التخزين القديم إن وُجد */
+        $judgT = $wpdb->prefix . 'ak_judgments';
+        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $judgT ) ) === $judgT ) $jc = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $judgT" );
+    }
+    /* (1) ملخّص الأعداد — أولوية قصوى، لا يُقصّ أبداً */
+    $summary = '';
+    if ( $jc ) $summary .= "الأحكام القضائية (المصدر: بوابة وزارة العدل): " . number_format( $jc ) . " حكماً قضائياً حقيقياً بنصوصه الكاملة (وقائع + أسباب + منطوق)، أغلبها المحكمة التجارية، مع أحكام المحكمة العليا والاستئناف والعامة. تُسترجع كسوابق قضائية حسب موضوع القضية. **مهم جداً:** القضايا الظاهرة في قسم «سوابق قضائية» أعلاه ليست إلا عيّنة مسترجَعة حسب الموضوع (عادةً ٥ أو ٦ قضايا فقط)، وليست كامل العدد. فإذا سُئلت عن إجمالي عدد الأحكام أو الصكوك في المكتبة فالجواب الصحيح هو " . number_format( $jc ) . " حكماً بالضبط، ويُمنع منعاً باتاً أن تعدّ العيّنة المعروضة أو تدّعي أن العدد الكلي ٥ أو ٦ أو ٢٦.";
+    $lawsT = $wpdb->prefix . 'ak_laws';
+    if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $lawsT ) ) === $lawsT ) {
+        $cats = $wpdb->get_results( "SELECT cat, COUNT(*) n FROM $lawsT GROUP BY cat ORDER BY n DESC", ARRAY_A );
+        if ( $cats ) {
+            $tot = 0; $cp = [];
+            foreach ( $cats as $c ) { $tot += (int) $c['n']; $cp[] = $c['cat'] . ' (' . $c['n'] . ')'; }
+            $summary .= ( $summary !== '' ? "\n\n" : '' ) . "الأنظمة الرسمية (المصدر: هيئة الخبراء بمجلس الوزراء): {$tot} نظاماً سعودياً بنصوصها الكاملة، في الفئات: " . implode( '، ', $cp ) . '. أي نظام سعودي نافذ ومنشور تجده هنا.';
+        }
+    }
+    /* (2) قائمة الكتب — تُقصّ لتملأ ما تبقّى */
+    $booksList = '';
+    $qbooks = get_option( 'ak_qadha_books' );
+    if ( is_array( $qbooks ) && $qbooks ) {
+        $titles = []; $nJournal = 0; $nLawEd = 0; $nBook = 0;
+        foreach ( $qbooks as $bk ) {
+            $t = trim( (string) ( $bk['title'] ?? '' ) );
+            if ( $t === '' || mb_strpos( $t, 'نظام رسمي' ) === 0 ) continue;
+            $titles[] = $t;
+            if ( mb_strpos( $t, 'مجلة قضاء' ) !== false ) $nJournal++;
+            elseif ( mb_strpos( $t, 'نظام' ) === 0 || preg_match( '/لائحت|لوائح|التنفيذية/u', $t ) ) $nLawEd++;
+            else $nBook++;
+        }
+        if ( $titles ) $booksList = 'المراجع والمؤلفات القضائية (' . count( $titles ) . ' مرجعاً بمجموعها، وهي أنواع مختلطة: نحو ' . $nBook . ' كتاباً وبحثاً قضائياً، و' . $nJournal . ' عدداً من «مجلة قضاء»، و' . $nLawEd . ' نسخة نظام/لائحة منشورة). قاعدة: إذا سُئلت عن «عدد الكتب» فبيّن هذا التقسيم بدقّة ولا تَعُدّ الجميع كتباً — أعداد المجلة والأنظمة المنشورة ليست كتباً قضائية.' . "\n• " . implode( "\n• ", $titles );
+    }
+    /* (3) التجميع */
+    $libIndex = $summary;
+    if ( $booksList !== '' ) {
+        $budget = 12000 - mb_strlen( $libIndex ) - 4;
+        if ( $budget > 400 ) $libIndex .= ( $libIndex !== '' ? "\n\n" : '' ) . mb_substr( $booksList, 0, $budget );
+    }
+    $libIndex = mb_substr( $libIndex, 0, 12000 );
 
     $sys = "أنت مساعد قانوني خبير في الأنظمة واللوائح السعودية تعمل لدى مكتب محاماة، تحلّل القضايا وتصوغ المستندات (صحيفة دعوى، مذكرات جوابية، لوائح اعتراض، عقود).\n"
         . "قواعد صارمة التزم بها:\n"
         . "1) استخرج البيانات من المرفقات والوقائع حرفياً ودقيقاً (الأسماء، الهويات، التواريخ، المبالغ، الأرقام). يُمنَع منعاً باتاً استخدام عبارات نائبة مثل «[اسم العامل]» أو «[اسم المنشأة]»؛ وإن تعذّر قراءة معلومة فاذكر ذلك صراحةً واطلبها من المحامي.\n"
         . "2) طبّق المواد النظامية بدقّة وميّز بين المتشابهة. تنبيه مهم: من يترك العمل بموجب المادة (81) من نظام العمل يحتفظ بكامل حقوقه ويستحق مكافأة نهاية الخدمة **كاملةً**، ولا تُطبَّق عليه تخفيضات الاستقالة الواردة في المادة (87). لا تخلط بين الترك بموجب المادة (81) والاستقالة.\n"
+        . "2-أ) **قاعدة الاستشهاد بأرقام المواد — صارمة جداً وأولوية قصوى:** يُمنع منعاً باتاً ذكر رقم أي مادة إلا إذا كان **نصّها الحرفي موجوداً في قسم «النصوص الرسمية لمواد النظام» المرفق أدناه**، وعندها اقتبس نصّها بين علامتي تنصيص قبل الاستنتاج منها. إذا لم تجد نص المادة المطلوبة ضمن النصوص المرفقة، فيُحظر عليك تخمين رقمها أو مضمونها من ذاكرتك؛ بل قل صراحةً: «لم يرد نص هذه المادة ضمن المراجع المتاحة، ويلزم التحقق من المصدر الرسمي». تذكّر أن رقم مادة خاطئاً في مذكرة قضائية خطأ جسيم. عرض المبدأ الفقهي أو القضائي العام (دون رقم مادة) مسموح، أما نسبة حكمٍ إلى رقم مادة محدّد فمشروط بوجود نصها المرفق حرفياً.\n"
+        . "2-ب) **قاعدة التحقّق من المصدر — مبدأ عام يسري على كل شيء (أنظمة، لوائح، كتب، أحكام، مرفقات المحامي):** كل عنوان أو تصنيف أو بيانات وصفية مرفقة (السنة، المحكمة، رقم القضية، اسم النظام، رقم المادة، تصنيف الكتاب) هي فهرسة آليّة قد تحوي أخطاء استخراج. **النصّ الحرفي للمصدر هو المرجع الأعلى دائماً، لا العنوان.** فقبل أن تجزم بأي معلومة محدّدة (رقم، سنة، مبلغ، اسم، تاريخ، مادة، نتيجة حكم)، تأكّد أنها واردة صراحةً في النصّ المرفق نفسه؛ وإن اختلف العنوان/التصنيف عن النصّ فاعتمد **ما في النصّ** ونبّه على الاختلاف باختصار. ولا تنسب لأي مصدر (حكم أو نظام أو كتاب أو مستند) معلومةً لا تراها في نصّه، ولا تُكمِل من ذاكرتك ما هو ناقص في المراجع. القاعدة الذهبية: **إن لم تجده في النصّ المرفق فلا تجزم به**؛ قل ما تعرفه بثقة، وميّز بوضوح ما هو مؤكّد من المرجع عمّا هو مبدأ عام أو غير متأكّد منه. معلومة خاطئة واحدة في عمل قانوني أخطر من الاعتراف بعدم التأكد.\n"
         . "3) أي افتراض (مثل افتراض عدم استخدام رصيد الإجازات) اذكره صراحةً كافتراضٍ لا كحقيقة، ونبّه إلى وجوب التحقق من السجلات.\n"
         . "4) راجع كل عملية حسابية خطوة بخطوة وتأكّد من صحتها رقمياً قبل عرض النتيجة.\n"
         . "5) عند التحليل في المحادثة: اعرض الأساس النظامي (أرقام المواد) وخطوات الحساب والافتراضات بوضوح. وعند كتابة المستند النهائي: أخرج نصاً عادياً منظّماً بأسلوب المكتب بلا تعليقات أو رموز.\n"
@@ -113,7 +438,10 @@ function ak_build_sys( $messages, $doc_type ) {
         . ( $lawCtx !== '' ? "\n\nالنصوص الرسمية لمواد النظام ذات الصلة (المصدر: هيئة الخبراء بمجلس الوزراء). استند إليها حرفياً، وتحقّق من أرقام المواد ونصوصها منها قبل أي استنتاج، ولا تعتمد على ذاكرتك في أرقام المواد:\n" . $lawCtx : "" )
         . ( $libEx !== '' ? "\n\nنماذج فعلية من مستندات بنفس النوع صاغها المكتب — هذه هي المرجع الأساسي لأسلوب الكتابة. تعلّم منها: المصطلحات، صيغ الافتتاح والختام، بنية المستند، نبرة الصياغة، ومستوى الاختصار. التزم بأسلوبها بدقة، دون نسخ وقائعها أو أرقامها:\n\n" . $libEx : "" )
         . ( $qadhaCtx !== '' ? "\n\nمراجع من المكتبة القضائية الرسمية (كتب وأبحاث ومجلات قضائية سعودية) ذات صلة بالموضوع — استأنس بها في التأصيل والمبادئ القضائية والاجتهادات، واذكر المصدر عند الاقتباس منها:\n" . $qadhaCtx : "" )
+        . ( $judgCtx !== '' ? "\n\nسوابق قضائية فعلية من أحكام المحاكم السعودية (بوابة وزارة العدل) ذات صلة بالموضوع — استأنس بها لبيان كيف طبّقت المحاكم النظام فعلاً، واستشهد برقم القضية والمحكمة والسنة عند الاعتماد عليها. لا تنسب للحكم ما ليس فيه:\n" . $judgCtx : "" )
+        . ( $libIndex !== '' ? "\n\nفهرس مكتبة المكتب الكامل (هذه هي كل محتويات المكتبة — لا يوجد فيها غيرها):\n" . $libIndex . "\nقاعدة صارمة: إذا سُئلت عن محتويات المكتبة أو هل يوجد فيها كتاب/نظام معيّن، أجب من هذا الفهرس حصراً ولا تدّعِ أبداً وجود مرجع ليس فيه. ولا تنسب أي معلومة إلى «المكتبة» إلا إذا وردت فعلاً في المراجع المقتبسة أعلاه." : "" )
         . ( $guide !== '' ? "\n\nدليل أسلوب المكتب الموجز:\n" . $guide : "" );
+    if ( function_exists( 'ak_learnings_approved_text' ) ) $sys .= ak_learnings_approved_text();
     return $sys;
 }
 }
@@ -244,6 +572,72 @@ function ak_qadha_retrieve( $queryText, $topBooks = 4, $topChunks = 5, $maxChars
     return mb_substr( trim( $out ), 0, $maxChars );
 }
 }
+/* مرشّحات أوسع من المكتبة (أنظمة + كتب) مع تصنيف النوع — لإعادة الترتيب */
+if ( ! function_exists( 'ak_qadha_candidates' ) ) {
+function ak_qadha_candidates( $queryText, $poolBooks = 14, $poolChunks = 28 ) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'ak_qadha_chunks';
+    if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) !== $t ) return [];
+    $books = get_option( 'ak_qadha_books' );
+    if ( ! is_array( $books ) || ! $books ) return [];
+    $qv = ak_qadha_embed_query( $queryText );
+    if ( ! $qv ) return [];
+    $bs = [];
+    foreach ( $books as $i => $bk ) { $c = ak_qadha_unpack( $bk['centroid'] ?? '' ); $bs[ $i ] = $c ? ak_qadha_dot( $qv, $c ) : -1; }
+    arsort( $bs );
+    $top = array_slice( array_keys( $bs ), 0, $poolBooks );
+    if ( ! $top ) return [];
+    $in   = implode( ',', array_map( 'intval', $top ) );
+    $rows = $wpdb->get_results( "SELECT b, body, vec FROM $t WHERE b IN ($in)", ARRAY_A );
+    if ( ! $rows ) return [];
+    $cs = [];
+    foreach ( $rows as $idx => $r ) { $v = ak_qadha_unpack( $r['vec'] ); $cs[ $idx ] = $v ? ak_qadha_dot( $qv, $v ) : -1; }
+    arsort( $cs );
+    $pick = array_slice( array_keys( $cs ), 0, $poolChunks );
+    $out = [];
+    foreach ( $pick as $idx ) {
+        $r     = $rows[ $idx ];
+        $title = (string) ( $books[ (int) $r['b'] ]['title'] ?? '' );
+        $isLaw = ( mb_strpos( $title, 'نظام رسمي' ) === 0 );
+        $out[] = [
+            'title' => trim( preg_replace( '/^نظام رسمي - /u', '', $title ) ),
+            'type'  => $isLaw ? 'نظام' : 'كتاب',
+            'body'  => trim( (string) $r['body'] ),
+        ];
+    }
+    return $out;
+}
+}
+
+/* إعادة ترتيب المرشّحات عبر Gemini Flash — يختار الأنسب ويفضّل الأنظمة */
+if ( ! function_exists( 'ak_rerank' ) ) {
+function ak_rerank( $queryText, $cands, $keep = 8 ) {
+    $n = count( $cands );
+    if ( $n <= $keep ) return $cands;
+    $key = get_option( 'ak_gemini_api_key', '' );
+    if ( ! $key ) return array_slice( $cands, 0, $keep );
+    $list = '';
+    foreach ( $cands as $i => $c ) {
+        $list .= '[' . $i . '] (' . $c['type'] . ' · ' . $c['title'] . ') ' . mb_substr( $c['body'], 0, 320 ) . "\n\n";
+    }
+    $prompt = 'سؤال المحامي: «' . mb_substr( $queryText, 0, 1500 ) . "»\n\n"
+        . "فيما يلي مقاطع مرشّحة من مكتبة قانونية سعودية (نوع كل مقطع: «نظام» = نص نظامي رسمي، أو «كتاب» = بحث/شرح). "
+        . "اختر أكثرها صلةً مباشرةً بالإجابة على السؤال (حتى " . $keep . " مقاطع).\n"
+        . "قواعد: (1) عند أسئلة الأساس النظامي أو أرقام المواد، فضّل مقاطع «نظام» على «كتاب». (2) استبعد غير المتصل بالسؤال ولو كان قريب الكلمات. (3) لا تُدرج مقطعاً لا يفيد الإجابة.\n"
+        . "أعد فقط أرقام المقاطع المختارة بترتيب الأهمية، JSON مصفوفة أرقام فقط، مثل: [3,0,7]\n\nالمقاطع:\n" . $list;
+    $body = wp_json_encode( [ 'contents' => [ [ 'parts' => [ [ 'text' => $prompt ] ] ] ], 'generationConfig' => [ 'temperature' => 0, 'maxOutputTokens' => 120 ] ] );
+    $resp = wp_remote_post( 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . rawurlencode( $key ), [ 'headers' => [ 'Content-Type' => 'application/json' ], 'body' => $body, 'timeout' => 18 ] );
+    if ( is_wp_error( $resp ) ) return array_slice( $cands, 0, $keep );
+    $d   = json_decode( wp_remote_retrieve_body( $resp ), true );
+    $txt = $d['candidates'][0]['content']['parts'][0]['text'] ?? '';
+    if ( ! preg_match( '/\[([0-9,\s]+)\]/', (string) $txt, $mm ) ) return array_slice( $cands, 0, $keep );
+    $idxs = array_filter( array_map( 'trim', explode( ',', $mm[1] ) ), 'strlen' );
+    $out  = [];
+    foreach ( $idxs as $i ) { $i = (int) $i; if ( isset( $cands[ $i ] ) ) $out[] = $cands[ $i ]; if ( count( $out ) >= $keep ) break; }
+    return $out ?: array_slice( $cands, 0, $keep );
+}
+}
+
 if ( ! function_exists( 'ak_law_defs' ) ) {
 function ak_law_defs() {
     return [
@@ -267,10 +661,16 @@ if ( ! function_exists( 'ak_law_text' ) ) {
 function ak_law_text( $domain ) {
     $src = ak_law_sources()[ $domain ] ?? null;
     if ( ! $src ) return '';
+    $stored = get_option( 'ak_law_stored_' . $domain, '' );
+    if ( is_string( $stored ) && $stored !== '' ) return $stored; /* نسخة محلية مخزّنة — بلا جلب خارجي */
     $ck = 'ak_law_text_' . $domain;
     $c  = get_transient( $ck );
     if ( $c !== false ) return $c;
-    $resp = wp_remote_get( 'https://laws.boe.gov.sa/BoeLaws/Laws/LawDetails/' . $src['id'] . '/1', [ 'timeout' => 15 ] );
+    $resp = wp_remote_get( 'https://laws.boe.gov.sa/BoeLaws/Laws/LawDetails/' . $src['id'] . '/1', [
+        'timeout'   => 30,
+        'sslverify' => false,
+        'headers'   => [ 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36', 'Accept-Language' => 'ar' ],
+    ] );
     if ( is_wp_error( $resp ) ) return '';
     $text = wp_strip_all_tags( wp_remote_retrieve_body( $resp ) );
     $text = html_entity_decode( (string) $text, ENT_QUOTES, 'UTF-8' );
@@ -292,21 +692,61 @@ if ( ! function_exists( 'ak_law_relevant' ) ) {
 function ak_law_relevant( $domain, $query, $maxChars = 6000 ) {
     $text = ak_law_text( $domain );
     if ( $text === '' ) return '';
-    $parts = preg_split( '/(?=المادة)/u', $text );
-    if ( ! is_array( $parts ) ) return '';
+    $parts = preg_split( '/(?=\nالمادة |^المادة )/u', $text );
+    if ( ! is_array( $parts ) || ! $parts ) return '';
+
+    /* تطبيع للمطابقة: توحيد الهمزات وإزالة أل التعريف والتشكيل */
+    $normalize = function ( $s ) {
+        $s = preg_replace( '/[أإآ]/u', 'ا', $s );
+        $s = preg_replace( '/[ًٌٍَُِّْـ]/u', '', $s );
+        return $s;
+    };
+    /* كلمات وقف عربية شائعة تُستبعد من المطابقة */
+    $stop = array_flip( [ 'في','من','على','عن','الى','إلى','ما','هو','هي','ماهي','ماهو','هل','كم','التي','الذي','هذا','هذه','ذلك','مع','او','أو','ثم','قد','كان','يكون','بين','كل','عند','عندما','اذا','إذا','رقم','المادة','مادة','النظام','نظام','وما','وهل','ماهو','حكم','ايش','وش','كيف','متى','اين','لماذا' ] );
+
+    /* استخرج كلمات السؤال ذات المعنى (≥3 أحرف بعد إزالة أل) */
+    $qn = $normalize( (string) $query );
+    $qWords = [];
+    foreach ( preg_split( '/[^\p{Arabic}0-9٠-٩]+/u', $qn, -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
+        $wb = preg_replace( '/^(ال|وال|بال|فال|لل)/u', '', $w );
+        if ( mb_strlen( $wb ) >= 3 && ! isset( $stop[ $w ] ) && ! isset( $stop[ $wb ] ) ) $qWords[ $wb ] = true;
+    }
+    /* أضف الكلمات المفتاحية الثابتة للنظام كتعزيز */
     $def = ak_law_defs()[ $domain ] ?? null;
-    $kw  = $def ? $def['kw'] : [];
-    if ( preg_match_all( '/المادة[^0-9٠-٩]{0,6}([0-9٠-٩]{1,3})/u', (string) $query, $mm ) ) {
-        foreach ( $mm[0] as $ref ) $kw[] = $ref;
+    if ( $def && ! empty( $def['kw'] ) ) foreach ( $def['kw'] as $k ) { $kb = $normalize( $k ); if ( $kb !== '' ) $qWords[ $kb ] = true; }
+    /* أرقام مواد صريحة في السؤال (أولوية قصوى) */
+    $refNums = [];
+    if ( preg_match_all( '/المادة[^0-9٠-٩]{0,8}([0-9٠-٩]{1,4})/u', (string) $query, $mm ) ) {
+        foreach ( $mm[1] as $n ) $refNums[] = $n;
     }
+    if ( ! $qWords && ! $refNums ) return mb_substr( $text, 0, $maxChars ); // fallback
+
+    /* صنّف كل مادة بعدد كلمات السؤال الواردة فيها */
+    $scored = [];
+    foreach ( $parts as $idx => $p ) {
+        if ( mb_strlen( trim( $p ) ) < 30 ) continue;
+        $pn = $normalize( $p );
+        $score = 0;
+        foreach ( $qWords as $w => $_ ) { if ( mb_strpos( $pn, $w ) !== false ) $score++; }
+        /* رقم مادة مطابق صريح → دفعة كبيرة */
+        foreach ( $refNums as $n ) { if ( mb_strpos( $p, 'المادة (' . $n . ')' ) !== false ) $score += 20; }
+        if ( $score > 0 ) $scored[ $idx ] = $score;
+    }
+    if ( ! $scored ) return mb_substr( $text, 0, min( $maxChars, 3000 ) );
+    arsort( $scored );
+    /* اختر الأعلى تصنيفاً أولاً حتى امتلاء الحد (يضمن وصول المادة الأنسب ولو كانت متأخرة) */
+    $chosen = []; $budget = 0;
+    foreach ( $scored as $idx => $sc ) {
+        $len = mb_strlen( trim( $parts[ $idx ] ) );
+        if ( $budget + $len > $maxChars && $chosen ) break;
+        $chosen[] = $idx; $budget += $len + 2;
+        if ( $budget > $maxChars ) break;
+    }
+    /* رتّب المختارة بترتيب ورودها في النظام لقراءة سليمة */
+    sort( $chosen );
     $picked = '';
-    foreach ( $parts as $p ) {
-        foreach ( $kw as $k ) {
-            if ( $k !== '' && mb_strpos( $p, $k ) !== false ) { $picked .= $p . "\n"; break; }
-        }
-        if ( mb_strlen( $picked ) > $maxChars ) break;
-    }
-    return mb_substr( $picked, 0, $maxChars );
+    foreach ( $chosen as $i ) $picked .= trim( $parts[ $i ] ) . "\n\n";
+    return mb_substr( trim( $picked ), 0, $maxChars );
 }
 }
 
@@ -575,7 +1015,7 @@ add_action( 'rest_api_init', function () {
     /* ① فحص الاتصال + هوية المستخدم */
     register_rest_route( 'ak/v1', '/ping', [
         'methods'             => 'GET',
-        'permission_callback' => 'ak_mobile_can',
+        'permission_callback' => 'ak_assistant_can',
         'callback'            => function () {
             $u   = wp_get_current_user();
             $uid = function_exists( 'ak_odoo_uid' ) ? ak_odoo_uid() : null;
@@ -844,6 +1284,15 @@ add_action( 'rest_api_init', function () {
                 }
             }
 
+            /* أضِف عدد ملفات أرشيف المنصة (المرفوعة مباشرة للمنصة دون Odoo) */
+            if ( $ids && function_exists( 'ak_vault_index' ) ) {
+                foreach ( ak_vault_index() as $vaid => $vm ) {
+                    if ( empty( $vm['local'] ) || ( $vm['model'] ?? '' ) !== 'sale.order' ) continue;
+                    $rid = (int) ( $vm['res_id'] ?? 0 );
+                    if ( $rid && in_array( $rid, $ids, true ) ) $counts[ $rid ] = ( $counts[ $rid ] ?? 0 ) + 1;
+                }
+            }
+
             $out = [];
             foreach ( $rows as $r ) {
                 $id = (int) ( $r['id'] ?? 0 );
@@ -890,6 +1339,25 @@ add_action( 'rest_api_init', function () {
                 ];
             }
 
+            /* ادمج ملفات أرشيف المنصة (المرفوعة محلياً لهذه القضية دون Odoo) */
+            if ( function_exists( 'ak_vault_index' ) ) {
+                $have = []; foreach ( $out as $a ) $have[ (int) $a['id'] ] = 1;
+                $loc = [];
+                foreach ( ak_vault_index() as $vaid => $vm ) {
+                    if ( empty( $vm['local'] ) ) continue;
+                    if ( ( $vm['model'] ?? '' ) !== 'sale.order' || (int) ( $vm['res_id'] ?? 0 ) !== $quote_id ) continue;
+                    if ( isset( $have[ (int) $vaid ] ) ) continue;
+                    $loc[] = [
+                        'id'          => (int) $vaid,
+                        'name'        => ak_mobile_safe_text( $vm['name'] ?? '' ),
+                        'mimetype'    => ak_mobile_safe_text( $vm['mimetype'] ?? 'application/octet-stream' ),
+                        'file_size'   => (int) ( $vm['size'] ?? 0 ),
+                        'create_date' => ! empty( $vm['ts'] ) ? substr( $vm['ts'], 0, 10 ) : '',
+                    ];
+                }
+                $out = array_merge( $loc, $out );
+            }
+
             return $out;
         },
     ] );
@@ -899,10 +1367,29 @@ add_action( 'rest_api_init', function () {
         'permission_callback' => 'ak_mobile_can',
         'args'                => [ 'id' => [ 'required' => true ] ],
         'callback'            => function ( $req ) {
-            $uid = ak_odoo_uid();
-            if ( ! $uid ) return new WP_Error( 'odoo', 'Odoo connection failed', [ 'status' => 502 ] );
             $id = (int) $req['id'];
             if ( ! $id ) return new WP_Error( 'bad', 'Invalid attachment id', [ 'status' => 400 ] );
+
+            /* أرشيف المنصة أولاً — الملفات المرفوعة مباشرة للمنصة (أسرع، ويعمل حتى لو تعذّر Odoo) */
+            if ( function_exists( 'ak_vault_index' ) && function_exists( 'ak_vault_dir' ) ) {
+                $vix = ak_vault_index();
+                if ( isset( $vix[ $id ] ) ) {
+                    $vfull = ak_vault_dir() . '/' . ( $vix[ $id ]['path'] ?? '' );
+                    if ( is_file( $vfull ) ) {
+                        $bin = file_get_contents( $vfull );
+                        return [
+                            'id'       => $id,
+                            'name'     => ak_mobile_safe_text( $vix[ $id ]['name'] ?? ( 'file-' . $id ) ),
+                            'mimetype' => ak_mobile_safe_text( $vix[ $id ]['mimetype'] ?? 'application/octet-stream' ),
+                            'size'     => (int) ( $vix[ $id ]['size'] ?? strlen( $bin ) ),
+                            'data'     => base64_encode( $bin ),
+                        ];
+                    }
+                }
+            }
+
+            $uid = ak_odoo_uid();
+            if ( ! $uid ) return new WP_Error( 'odoo', 'Odoo connection failed', [ 'status' => 502 ] );
 
             $rows = ak_odoo_rpc( 'object', 'execute_kw', [
                 AK_ODOO_DB, $uid, AK_ODOO_API_KEY,
@@ -1261,7 +1748,7 @@ add_action( 'rest_api_init', function () {
     /* ⑦ أسلوب المحامي — إعادة صياغة نص بأسلوب قانوني (لإضافة Word) */
     register_rest_route( 'ak/v1', '/style', [
         'methods'             => 'POST',
-        'permission_callback' => 'ak_mobile_can',
+        'permission_callback' => 'ak_assistant_can',
         'callback'            => function ( $req ) {
             $text = trim( (string) $req->get_param( 'text' ) );
             if ( $text === '' ) return new WP_Error( 'empty', 'لا يوجد نص', [ 'status' => 400 ] );
@@ -1345,7 +1832,7 @@ add_action( 'rest_api_init', function () {
     /* تحضير: يبني التوجيه + يسترجع المكتبة، ويرجّع المفتاح للعميل ليكلّم Gemini مباشرةً (بثّ حقيقي بلا جدار السيرفر) */
     register_rest_route( 'ak/v1', '/prep', [
         'methods'             => 'POST',
-        'permission_callback' => 'ak_mobile_can',
+        'permission_callback' => 'ak_assistant_can',
         'callback'            => function ( $req ) {
             $messages = $req->get_param( 'messages' );
             $doc_type = sanitize_text_field( (string) $req->get_param( 'doc_type' ) );
@@ -1356,13 +1843,47 @@ add_action( 'rest_api_init', function () {
             if ( ! in_array( $model, $allowed, true ) ) $model = 'gemini-2.5-pro';
             $key = get_option( 'ak_gemini_api_key', '' );
             if ( ! $key ) return new WP_Error( 'nokey', 'مفتاح الذكاء غير مضبوط', [ 'status' => 500 ] );
+            $sys = ak_build_sys( $messages, $doc_type );
+            $sys .= "\n\n=== أدوات المكتبة (استعلام مباشر) ===\n"
+                . "بين يديك أدوات تستعلم بها مباشرةً من مكتبة المكتب لحظياً. استعملها بنشاط بدل الاعتماد على الذاكرة أو العنوان:\n"
+                . "• سؤال عن عدد/إحصاء (كم حكماً/نظاماً/كتاباً) ← library_stats.\n"
+                . "• نصّ حكم بعينه أو تفاصيله ← get_judgment (برقم القضية أو id من نتائج البحث).\n"
+                . "• الأحدث/الأقدم ← recent_judgments. سنة/محكمة محددة ← filter_judgments. موضوع/واقعة ← search_judgments.\n"
+                . "• قبل أن تستشهد برقم أي مادة نظامية ← get_law_article (بالاسم والرقم) وتحقّق من نصّها الحرفي. بحث موضوعي في الأنظمة ← search_laws. في الكتب والأبحاث ← search_books.\n"
+                . "**قاعدة العمل:** لا تجزم بعددٍ أو رقم مادةٍ أو تفاصيل حكمٍ من ذاكرتك أو من عنوان مرفق — نادِ الأداة المناسبة أولاً واعتمد نتيجتها الحرفية. يجوز أن تنادي أكثر من أداة على التوالي حتى تتأكّد. إن لم تُرجِع الأداة النتيجة المطلوبة فاعترف بذلك بوضوح ولا تخترع.";
             return [
                 'key'             => $key,
-                'system'          => ak_build_sys( $messages, $doc_type ),
+                'system'          => $sys,
                 'model'           => $model,
                 'temperature'     => 0.3,
-                'maxOutputTokens' => 16384,
+                'maxOutputTokens' => 65536,
+                'tools'           => function_exists( 'ak_tool_defs' ) ? ak_tool_defs() : [],
             ];
+        },
+    ] );
+
+    /* منفّذ أداة واحدة للمساعد الوكيل — يستدعيه العميل ضمن حلقة نداء الأدوات */
+    register_rest_route( 'ak/v1', '/tool', [
+        'methods'             => 'POST',
+        'permission_callback' => 'ak_assistant_can',
+        'callback'            => function ( $req ) {
+            $name = sanitize_text_field( (string) $req->get_param( 'name' ) );
+            $args = $req->get_param( 'args' );
+            if ( ! is_array( $args ) ) $args = [];
+            if ( ! function_exists( 'ak_run_tool' ) ) return [ 'error' => 'الأدوات غير متاحة' ];
+            @set_time_limit( 60 );
+            return [ 'result' => ak_run_tool( $name, $args ) ];
+        },
+    ] );
+
+    /* مفتاح التوليد للاستوديو (صور/فيديو) — العميل يكلّم Imagen/Veo مباشرةً */
+    register_rest_route( 'ak/v1', '/aikey', [
+        'methods'             => 'GET',
+        'permission_callback' => 'ak_assistant_can',
+        'callback'            => function () {
+            $key = get_option( 'ak_gemini_api_key', '' );
+            if ( ! $key ) return new WP_Error( 'nokey', 'مفتاح الذكاء غير مضبوط', [ 'status' => 500 ] );
+            return [ 'key' => $key ];
         },
     ] );
 
@@ -1461,14 +1982,18 @@ add_action( 'rest_api_init', function () {
             if ( is_array( $cent ) ) update_option( 'ak_qadha_books', $cent, false );
             $rows = $req->get_param( 'chunks' );
             $ins  = 0;
-            if ( is_array( $rows ) ) foreach ( $rows as $r ) {
-                $wpdb->replace( $t, [
-                    'id'   => (int) ( $r['id'] ?? 0 ),
-                    'b'    => (int) ( $r['b'] ?? 0 ),
-                    'body' => (string) ( $r['text'] ?? '' ),
-                    'vec'  => (string) ( $r['v'] ?? '' ),
-                ] );
-                $ins++;
+            /* إدخال جماعي (استعلام واحد للدفعة) — أسرع بكثير ويتفادى مهلة التنفيذ */
+            if ( is_array( $rows ) && $rows ) {
+                $ph = []; $vals = [];
+                foreach ( $rows as $r ) {
+                    $ph[]   = '(%d,%d,%s,%s)';
+                    $vals[] = (int) ( $r['id'] ?? 0 );
+                    $vals[] = (int) ( $r['b'] ?? 0 );
+                    $vals[] = (string) ( $r['text'] ?? '' );
+                    $vals[] = (string) ( $r['v'] ?? '' );
+                    $ins++;
+                }
+                if ( $ph ) $wpdb->query( $wpdb->prepare( "REPLACE INTO $t (id,b,body,vec) VALUES " . implode( ',', $ph ), $vals ) );
             }
             return [ 'ok' => true, 'inserted' => $ins, 'total' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t" ) ];
         },
@@ -1488,7 +2013,7 @@ add_action( 'rest_api_init', function () {
     /* ⑨ بدء رفع ملف كبير مباشرة لخوادم Gemini (Files API) — يرجّع رابط رفع آمن */
     register_rest_route( 'ak/v1', '/upload/start', [
         'methods'             => 'POST',
-        'permission_callback' => 'ak_mobile_can',
+        'permission_callback' => 'ak_assistant_can',
         'callback'            => function ( $req ) {
             $name = sanitize_text_field( (string) $req->get_param( 'name' ) );
             $mime = sanitize_text_field( (string) $req->get_param( 'mime' ) );
@@ -1518,7 +2043,7 @@ add_action( 'rest_api_init', function () {
     /* ⑨ب رفع الملف على أجزاء عبر السيرفر (يتفادى CORS، يتحمّل أي حجم) */
     register_rest_route( 'ak/v1', '/upload/chunk', [
         'methods'             => 'POST',
-        'permission_callback' => 'ak_mobile_can',
+        'permission_callback' => 'ak_assistant_can',
         'callback'            => function ( $req ) {
             $id     = sanitize_text_field( (string) $req->get_param( 'upload_id' ) );
             $offset = (int) $req->get_param( 'offset' );
@@ -1548,7 +2073,7 @@ add_action( 'rest_api_init', function () {
     /* ⑩ حالة ملف Gemini (للتأكد أنه جاهز ACTIVE قبل الاستخدام، خصوصاً الفيديو) */
     register_rest_route( 'ak/v1', '/upload/status', [
         'methods'             => 'GET',
-        'permission_callback' => 'ak_mobile_can',
+        'permission_callback' => 'ak_assistant_can',
         'args'                => [ 'name' => [ 'required' => true ] ],
         'callback'            => function ( $req ) {
             $name = ltrim( (string) $req->get_param( 'name' ), '/' );
